@@ -1,7 +1,7 @@
 import { CONFIG, saveBootstrap } from './config.js';
 import { hasSupabase, rpc, supabase } from './lib/db.js';
 import { getClientToken, setClientToken } from './lib/client.js';
-import { daySlots, fmtTime, todayISO } from './lib/slots.js';
+import { daySlots, fmtTime, todayISO, nowMinutesInShopTz, shopDateOptions } from './lib/slots.js';
 import { startRing, stopRing } from './lib/ringtone.js';
 import { notifyPermission, requestNotifyPermission, notify } from './lib/notify.js';
 import { HAIRCUT_STYLES, styleCover, stylePhotos } from './styles-data.js';
@@ -72,8 +72,7 @@ function renderSiteConfig() {
 
 // ---------------------------------------------------------------- live queue (today)
 function isShopOpenNow() {
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowMin = nowMinutesInShopTz();
   const [oh, om] = siteConfig.open_time.slice(0, 5).split(':').map(Number);
   const [ch, cm] = siteConfig.close_time.slice(0, 5).split(':').map(Number);
   return nowMin >= oh * 60 + om && nowMin < ch * 60 + cm;
@@ -90,8 +89,7 @@ async function loadQueue() {
   const rows = await rpc('public_queue_today');
   const slots = daySlots(siteConfig.open_time.slice(0, 5), siteConfig.close_time.slice(0, 5), siteConfig.slot_minutes);
   const byTime = new Map(rows.map((r) => [r.slot_time.slice(0, 5), r.status]));
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowMin = nowMinutesInShopTz();
 
   let ahead = 0, nextFree = null;
   const grid = slots.map((s) => {
@@ -231,12 +229,8 @@ async function submitStyleRequest() {
 function buildDateOptions() {
   const sel = $('#bk-date');
   sel.innerHTML = '';
-  const today = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  for (const { iso, isToday, isTomorrow, date } of shopDateOptions(7)) {
+    const label = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
     sel.insertAdjacentHTML('beforeend', `<option value="${iso}">${label}</option>`);
   }
   sel.addEventListener('change', refreshSlotOptions);
@@ -250,9 +244,8 @@ async function refreshSlotOptions() {
     const rows = date === todayISO() ? await rpc('public_queue_today') : [];
     taken = new Set(rows.filter((r) => r.status !== 'cancelled').map((r) => r.slot_time.slice(0, 5)));
   } catch { /* if this fails we just show every slot as selectable */ }
-  const now = new Date();
   const isToday = date === todayISO();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowMin = nowMinutesInShopTz();
   const free = slots.filter((s) => {
     if (taken.has(s)) return false;
     if (!isToday) return true;
