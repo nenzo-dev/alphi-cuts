@@ -23,7 +23,7 @@ const chosen = SUPABASE.url && SUPABASE.anonKey ? SUPABASE : savedSetup();
 export const CONFIG = {
   shortName: 'AlPhi Cuts',
   fullName: "AlPhi Cuts — Alfred Phiri's Barbershop",
-  siteUrl: 'https://alphicuts.pages.dev/',
+  siteUrl: 'https://alphi-cuts.nenzoutadiwananshe.workers.dev/',
   supabase: chosen ? { url: chosen.url.replace(/\/+$/, ''), anonKey: chosen.anonKey } : { url: '', anonKey: '' },
 };
 
