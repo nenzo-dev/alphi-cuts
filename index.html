@@ -7,15 +7,16 @@
 <meta name="description" content="Book your haircut in advance at AlPhi Cuts, Chongwe's best-rated barbershop. K50 any cut, with or without dye. See the queue before you leave home.">
 <meta name="theme-color" content="#171512">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="icon" href="icons/logo.webp" type="image/webp">
+<link rel="apple-touch-icon" href="icons/logo.webp">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div class="bg-watermark" aria-hidden="true"></div>
 
 <header class="site-header">
   <div class="container row">
-    <div class="brand"><span class="mark">A</span> <span id="hdr-shop-name">AlPhi Cuts</span></div>
+    <div class="brand"><img src="icons/logo.webp" alt="" class="brand-logo"> <span id="hdr-shop-name">AlPhi Cuts</span></div>
     <nav class="nav-links">
       <a href="#styles">Styles</a>
       <a href="#queue">Today's queue</a>
@@ -52,11 +53,23 @@
       <p class="muted">Browse real cuts done at the shop &mdash; tap one to see more angles, and it'll be pre-filled when you book.</p>
     </div>
     <div class="slot-grid" id="style-gallery" style="grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:14px"></div>
+
+    <div class="card" style="margin-top:20px;max-width:520px">
+      <h3>Can't find the style you want?</h3>
+      <p class="muted small">Describe it, or upload a photo of it, and Alfred will see it before your cut.</p>
+      <label for="sr-desc">Describe the style (optional if you upload a photo)</label>
+      <textarea id="sr-desc" placeholder="e.g. Skin fade with a hard part and a beard line-up"></textarea>
+      <label for="sr-photo">Reference photo (optional)</label>
+      <input id="sr-photo" type="file" accept="image/*">
+      <button class="btn btn-gold btn-block" style="margin-top:12px" id="sr-submit">Send to Alfred</button>
+      <div id="sr-msg"></div>
+    </div>
   </div>
 </section>
 
 <section id="queue">
   <div class="container">
+    <div id="free-banner-slot"></div>
     <div class="section-head">
       <h2>Today's queue</h2>
       <p class="muted">Check before you leave home &mdash; see exactly how busy it is and when the next free slot is.</p>
@@ -66,6 +79,7 @@
         <span class="muted">Loading today's queue&hellip;</span>
       </div>
       <div class="slot-grid" id="slot-grid"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:14px;display:none" id="notify-free-btn">&#128276; Notify me when Alfred is free</button>
     </div>
   </div>
 </section>
@@ -176,7 +190,10 @@
       <img id="qr-image" alt="QR code to install the AlPhi Cuts app">
       <div>
         <p class="muted" style="margin-bottom:10px">Or tap below on this phone:</p>
-        <button class="btn btn-gold" id="get-app-btn">Get the app</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-gold" id="get-app-btn">Get the app</button>
+          <button class="btn btn-ghost" id="qr-print-btn">&#128424;&#65039; Print QR code</button>
+        </div>
       </div>
     </div>
   </div>
@@ -190,6 +207,7 @@
 </footer>
 
 <div id="modal-root"></div>
+<div id="receipt-print"></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

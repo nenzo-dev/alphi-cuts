@@ -7,8 +7,8 @@
 // Until then, the app shows a one-time setup screen where you can paste them in instead, kept in
 // this browser only -- handy for trying the site before editing this file.
 const SUPABASE = {
-  url: '',
-  anonKey: '',
+  url: 'https://dbiojclfbqmvpvmqsfhv.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRiaW9qY2xmYnFtdnB2bXFzZmh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MDE5MDIsImV4cCI6MjEwNjE3NzkwMn0.mVHW9t3J1LUPzIqxzhccXm07JanRTwXt41rJwfLgU8A',
 };
 
 function savedSetup() {

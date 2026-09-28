@@ -5,31 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Owner Panel &mdash; AlPhi Cuts</title>
 <meta name="robots" content="noindex">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/logo.webp" type="image/webp">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div class="bg-watermark" aria-hidden="true"></div>
 
 <div id="login-screen" class="modal-backdrop">
   <div class="modal">
-    <h3>Owner login</h3>
-    <label for="lg-email">Email</label>
-    <input id="lg-email" type="email" placeholder="alfred@example.com">
-    <label for="lg-pass">Password</label>
-    <input id="lg-pass" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
-    <button class="btn btn-gold btn-block" style="margin-top:14px" id="lg-go">Sign in</button>
-    <div id="lg-msg"></div>
-    <p class="small muted" style="margin-top:14px">First time here? Create your owner account from the Supabase dashboard (Authentication &rarr; Users &rarr; Add user), then a matching row in the <code>profiles</code> table &mdash; see README.md.</p>
+    <div id="login-mode">
+      <h3><img src="icons/logo.webp" alt="" class="brand-logo-lg"> Owner login</h3>
+      <label for="lg-email">Email</label>
+      <input id="lg-email" type="email" placeholder="alfred@example.com">
+      <label for="lg-pass">Password</label>
+      <input id="lg-pass" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
+      <button class="btn btn-gold btn-block" style="margin-top:14px" id="lg-go">Sign in</button>
+      <div id="lg-msg"></div>
+      <p class="small muted" style="margin-top:14px" id="lg-setup-link"></p>
+    </div>
+    <div id="setup-mode" style="display:none">
+      <h3 id="su-title">Set up the owner account</h3>
+      <p class="small muted" id="su-intro">This shop has no owner account yet. Whoever sets this up first becomes the owner &mdash; do this once, as Alfred.</p>
+      <label for="su-name">Your name</label>
+      <input id="su-name" placeholder="Alfred Phiri">
+      <label for="su-email">Email</label>
+      <input id="su-email" type="email" placeholder="alfred@example.com">
+      <label for="su-pass">Choose a password</label>
+      <input id="su-pass" type="password" placeholder="At least 8 characters">
+      <button class="btn btn-gold btn-block" style="margin-top:14px" id="su-go">Create owner account</button>
+      <div id="su-msg"></div>
+      <p class="small muted" style="margin-top:14px"><a href="#" id="su-back">Already have an account? Sign in</a></p>
+    </div>
   </div>
 </div>
 
 <div class="admin-shell" id="admin-shell" style="display:none">
   <aside class="admin-side">
-    <div class="brand" style="margin-bottom:18px"><span class="mark">A</span> Owner Panel</div>
+    <div class="brand" style="margin-bottom:18px"><img src="icons/logo.webp" alt="" class="brand-logo"> Owner Panel</div>
     <a href="#queue" data-tab="queue" class="active">Today's queue</a>
     <a href="#bookings" data-tab="bookings">All bookings</a>
     <a href="#feedback" data-tab="feedback">Reviews</a>
     <a href="#chat" data-tab="chat">Messages</a>
+    <a href="#styles" data-tab="styles">Haircut styles</a>
+    <a href="#requests" data-tab="requests">Style requests</a>
+    <a href="#payments" data-tab="payments">Payments</a>
+    <a href="#owners" data-tab="owners">Owners</a>
     <a href="#shop" data-tab="shop">Shop details</a>
     <a href="#" id="logout-link" style="margin-top:20px">Sign out</a>
     <a href="index.html" class="muted">&larr; View public site</a>
@@ -79,6 +99,60 @@
             <button class="btn btn-gold" id="admin-chat-send">Send</button>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section id="tab-styles" style="display:none">
+      <h2>Haircut styles</h2>
+      <div class="card">
+        <p class="muted small">Add extra styles beyond the built-in gallery &mdash; clients will see these too when picking a style to book.</p>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input id="st-label" placeholder="Style name, e.g. Taper Fade + Beard" style="max-width:280px">
+          <button class="btn btn-sm btn-gold" id="st-add">Add style</button>
+        </div>
+        <div id="st-msg"></div>
+        <div id="styles-list"></div>
+      </div>
+    </section>
+
+    <section id="tab-requests" style="display:none">
+      <h2>Style requests</h2>
+      <p class="muted small">Styles clients described or uploaded a photo of because they didn't see it in the gallery.</p>
+      <div class="card" id="requests-list"></div>
+    </section>
+
+    <section id="tab-payments" style="display:none">
+      <h2>Payments</h2>
+      <div class="card">
+        <h3 style="margin-top:0">Your online payment details</h3>
+        <div class="payment-disclaimer">&#9888;&#65039; Strict rule: only approve a booking for online payment when you genuinely intend to accept it, and only click <b>Mark paid</b> after you have personally confirmed the money actually reached you. These details are never shown publicly &mdash; only to a client whose specific booking you approve below.</div>
+        <label for="pc-instructions">Mobile money / bank details clients should pay to</label>
+        <textarea id="pc-instructions" placeholder="e.g. MTN Mobile Money: 097xxxxxxx (Alfred Phiri)"></textarea>
+        <button class="btn btn-gold" style="margin-top:12px" id="pc-save">Save payment details</button>
+        <div id="pc-msg"></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Bookings awaiting payment action</h3>
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th><th></th></tr></thead>
+          <tbody id="payments-table"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-owners" style="display:none">
+      <h2>Owners</h2>
+      <div class="card">
+        <p class="muted small">Add another owner by email. That person must have already created an account (they can do this from the login screen &mdash; it just won't make them an owner until you add them here). At least one owner must always remain.</p>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input id="ow-email" type="email" placeholder="email@example.com" style="max-width:280px">
+          <button class="btn btn-sm btn-gold" id="ow-add">Add owner</button>
+        </div>
+        <div id="ow-msg"></div>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Added</th><th></th></tr></thead>
+          <tbody id="owners-table"></tbody>
+        </table>
       </div>
     </section>
 

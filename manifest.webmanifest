@@ -9,7 +9,7 @@
   "theme_color": "#171512",
   "orientation": "portrait",
   "icons": [
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "icons/logo.webp", "sizes": "1080x1080", "type": "image/webp", "purpose": "any" },
+    { "src": "icons/logo.webp", "sizes": "1080x1080", "type": "image/webp", "purpose": "maskable" }
   ]
 }

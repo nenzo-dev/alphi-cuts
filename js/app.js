@@ -3,6 +3,7 @@ import { hasSupabase, rpc, supabase } from './lib/db.js';
 import { getClientToken, setClientToken } from './lib/client.js';
 import { daySlots, fmtTime, todayISO } from './lib/slots.js';
 import { startRing, stopRing } from './lib/ringtone.js';
+import { notifyPermission, requestNotifyPermission, notify } from './lib/notify.js';
 import { HAIRCUT_STYLES, styleCover, stylePhotos } from './styles-data.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -70,6 +71,21 @@ function renderSiteConfig() {
 }
 
 // ---------------------------------------------------------------- live queue (today)
+function isShopOpenNow() {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const [oh, om] = siteConfig.open_time.slice(0, 5).split(':').map(Number);
+  const [ch, cm] = siteConfig.close_time.slice(0, 5).split(':').map(Number);
+  return nowMin >= oh * 60 + om && nowMin < ch * 60 + cm;
+}
+
+let wasBusy = null; // null = not checked yet this session, so the first poll never fires a notification
+function renderFreeBanner(isFreeNow) {
+  $('#free-banner-slot').innerHTML = isFreeNow
+    ? `<div class="free-banner">&#9986;&#65039; Alfred is free right now &mdash; walk in or <a href="#book" style="color:#171512;text-decoration:underline">book instantly</a>!</div>`
+    : '';
+}
+
 async function loadQueue() {
   const rows = await rpc('public_queue_today');
   const slots = daySlots(siteConfig.open_time.slice(0, 5), siteConfig.close_time.slice(0, 5), siteConfig.slot_minutes);
@@ -84,7 +100,7 @@ async function loadQueue() {
     const status = byTime.get(s);
     let cls = 'slot';
     if (!status) { cls += ' free'; if (nextFree === null && mins >= nowMin) nextFree = s; }
-    else if (['booked', 'called', 'checked_in'].includes(status)) { cls += ' taken'; if (mins >= nowMin) ahead++; }
+    else if (['booked', 'on_deck', 'called', 'checked_in'].includes(status)) { cls += ' taken'; if (mins >= nowMin) ahead++; }
     else if (status === 'in_chair') cls += ' now';
     if (mins + siteConfig.slot_minutes <= nowMin) cls += ' past';
     return `<div class="${cls}" title="${status || 'free'}">${fmtTime(s)}</div>`;
@@ -94,15 +110,51 @@ async function loadQueue() {
   $('#queue-summary').innerHTML = nextFree
     ? `<span class="big">${ahead}</span> <span class="muted">booked slot${ahead === 1 ? '' : 's'} ahead right now &middot; next free slot: <b style="color:var(--gold-soft)">${fmtTime(nextFree)}</b></span>`
     : `<span class="muted">No free slots left today &mdash; try booking for tomorrow.</span>`;
+
+  const openNow = isShopOpenNow();
+  const inChairNow = rows.some((r) => r.status === 'in_chair');
+  const isFreeNow = openNow && !inChairNow;
+  renderFreeBanner(isFreeNow);
+  if (wasBusy === true && isFreeNow) {
+    notify('AlPhi Cuts is free right now!', 'No one in the chair — walk in or book instantly.');
+  }
+  wasBusy = inChairNow;
+
+  const nb = $('#notify-free-btn');
+  nb.style.display = notifyPermission() === 'default' ? 'block' : 'none';
 }
+$('#notify-free-btn').addEventListener('click', async () => { await requestNotifyPermission(); $('#notify-free-btn').style.display = 'none'; });
 
 // ---------------------------------------------------------------- style gallery
+// Two sources merged into one gallery: the 36 built-in photos (static, from styles-data.js) and
+// whatever Alfred has uploaded since (from the "haircut-styles" Supabase Storage bucket, via
+// list_haircut_styles()). Both render and open the same way, keyed by a "db:<id>" or "static:<slug>"
+// id so the lightbox knows which source to look the style back up in.
+let dbStyles = []; // [{ id, label, photos: [publicUrl, ...] }]
 let selectedStyle = '';
 
+function dbStyleImageUrl(storagePath) {
+  return supabase.storage.from('haircut-styles').getPublicUrl(storagePath).data.publicUrl;
+}
+
+async function loadDbStyles() {
+  try {
+    const rows = await rpc('list_haircut_styles');
+    const byId = new Map();
+    for (const r of rows) {
+      if (!byId.has(r.style_id)) byId.set(r.style_id, { id: r.style_id, label: r.label, photos: [] });
+      if (r.storage_path) byId.get(r.style_id).photos.push(dbStyleImageUrl(r.storage_path));
+    }
+    dbStyles = [...byId.values()].filter((s) => s.photos.length > 0);
+  } catch { dbStyles = []; }
+}
+
 function renderStyleGallery() {
-  $('#style-gallery').innerHTML = HAIRCUT_STYLES.map((s) => `
-    <div class="slot free" style="cursor:pointer;padding:0;overflow:hidden;aspect-ratio:1/1;position:relative" data-style="${esc(s.slug)}">
-      <img src="${styleCover(s)}" alt="${esc(s.label)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">
+  const staticCards = HAIRCUT_STYLES.map((s) => ({ key: `static:${s.slug}`, label: s.label, cover: styleCover(s) }));
+  const dbCards = dbStyles.map((s) => ({ key: `db:${s.id}`, label: s.label, cover: s.photos[0] }));
+  $('#style-gallery').innerHTML = [...staticCards, ...dbCards].map((s) => `
+    <div class="slot free" style="cursor:pointer;padding:0;overflow:hidden;aspect-ratio:1/1;position:relative" data-style="${esc(s.key)}">
+      <img src="${s.cover}" alt="${esc(s.label)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">
       <span style="position:absolute;left:0;right:0;bottom:0;background:rgba(23,21,18,.85);color:var(--gold-soft);padding:5px 6px;font-size:11px;font-weight:800">${esc(s.label)}</span>
     </div>`).join('');
   $('#style-gallery').querySelectorAll('[data-style]').forEach((el) => {
@@ -110,17 +162,24 @@ function renderStyleGallery() {
   });
 }
 
-function openStyleLightbox(slug) {
-  const style = HAIRCUT_STYLES.find((s) => s.slug === slug);
-  if (!style) return;
-  const photos = stylePhotos(style);
+function openStyleLightbox(key) {
+  let label, photos;
+  if (key.startsWith('static:')) {
+    const style = HAIRCUT_STYLES.find((s) => s.slug === key.slice(7));
+    if (!style) return;
+    label = style.label; photos = stylePhotos(style);
+  } else {
+    const style = dbStyles.find((s) => s.id === key.slice(3));
+    if (!style) return;
+    label = style.label; photos = style.photos;
+  }
   $('#modal-root').innerHTML = `
     <div class="modal-backdrop" id="style-modal-backdrop">
       <div class="modal" style="max-width:600px">
         <button class="modal-close" id="style-modal-close">&times;</button>
-        <h3>${esc(style.label)}</h3>
+        <h3>${esc(label)}</h3>
         <div class="slot-grid" style="grid-template-columns:repeat(auto-fill, minmax(120px, 1fr))">
-          ${photos.map((p) => `<img src="${p}" alt="${esc(style.label)}" style="width:100%;border-radius:8px;aspect-ratio:1/1;object-fit:cover">`).join('')}
+          ${photos.map((p) => `<img src="${p}" alt="${esc(label)}" style="width:100%;border-radius:8px;aspect-ratio:1/1;object-fit:cover">`).join('')}
         </div>
         <button class="btn btn-gold btn-block" style="margin-top:16px" id="style-pick-btn">Book this style</button>
       </div>
@@ -129,14 +188,43 @@ function openStyleLightbox(slug) {
   $('#style-modal-close').addEventListener('click', close);
   $('#style-modal-backdrop').addEventListener('click', (e) => { if (e.target.id === 'style-modal-backdrop') close(); });
   $('#style-pick-btn').addEventListener('click', () => {
-    selectedStyle = style.label;
+    selectedStyle = label;
     const chip = $('#bk-style-chip');
     chip.style.display = 'block';
-    chip.innerHTML = `Style: <b>${esc(style.label)}</b> &middot; <a href="#" id="bk-style-clear">change</a>`;
+    chip.innerHTML = `Style: <b>${esc(label)}</b> &middot; <a href="#" id="bk-style-clear">change</a>`;
     $('#bk-style-clear').addEventListener('click', (e) => { e.preventDefault(); selectedStyle = ''; chip.style.display = 'none'; });
     close();
     document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
   });
+}
+
+// ---------------------------------------------------------------- "can't find your style"
+async function submitStyleRequest() {
+  const desc = $('#sr-desc').value.trim();
+  const file = $('#sr-photo').files[0];
+  const msg = $('#sr-msg');
+  msg.innerHTML = '';
+  if (!desc && !file) { msg.innerHTML = '<div class="form-msg error">Describe the style, or upload a photo of it (or both).</div>'; return; }
+  const btn = $('#sr-submit');
+  btn.disabled = true;
+  try {
+    let token = getClientToken();
+    if (!token) { token = crypto.randomUUID().replace(/-/g, ''); setClientToken(token); }
+    let storagePath = null;
+    if (file) {
+      const path = `${token}/${Date.now()}-${file.name}`.replace(/[^\w.\-/]/g, '_');
+      const { error: upErr } = await supabase.storage.from('style-requests').upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      storagePath = path;
+    }
+    await rpc('submit_style_request', { p_token: token, p_description: desc, p_storage_path: storagePath });
+    msg.innerHTML = '<div class="form-msg ok">Thanks! Alfred will take a look — you can also mention it in Chat.</div>';
+    $('#sr-desc').value = ''; $('#sr-photo').value = '';
+  } catch (e) {
+    msg.innerHTML = `<div class="form-msg error">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ---------------------------------------------------------------- booking form
@@ -205,16 +293,32 @@ async function submitBooking() {
 }
 
 // ---------------------------------------------------------------- my booking (this device's ticket)
+// Ringing/notifying starts at "on_deck" (two people away) so there's time to head over, and keeps
+// going through "called" (next up) until the client checks in or their cut starts.
 let myBookingTimer = null;
+let lastNotifiedStatus = null;
+const STATUS_LABEL_MB = {
+  booked: 'Booked',
+  on_deck: "Almost up — 2 away, stick around!",
+  called: "You're up next!",
+  checked_in: 'Checked in',
+  in_chair: 'In the chair',
+  done: 'Done — thank you!',
+  no_show: 'Missed (no-show)',
+  cancelled: 'Cancelled',
+};
 async function renderMyBooking() {
   const token = getClientToken();
   const el = $('#my-booking-body');
-  if (!token) { el.innerHTML = `You don't have an active booking on this device yet.`; stopRing(); return; }
+  if (!token) { el.innerHTML = `You don't have an active booking on this device yet.`; stopRing(); lastNotifiedStatus = null; return; }
   let b;
-  try { b = await rpc('get_my_booking', { p_token: token }); } catch { b = null; }
-  if (!b) { el.innerHTML = `You don't have an active booking on this device yet.`; stopRing(); return; }
+  try { b = (await rpc('get_my_booking', { p_token: token }))[0]; } catch { b = null; }
+  if (!b) { el.innerHTML = `You don't have an active booking on this device yet.`; stopRing(); lastNotifiedStatus = null; return; }
 
-  const label = { booked: 'Booked', called: "You're up next!", checked_in: 'Checked in', in_chair: 'In the chair', done: 'Done — thank you!', no_show: 'Missed (no-show)', cancelled: 'Cancelled' }[b.status] || b.status;
+  const ringingStatuses = ['on_deck', 'called'];
+  const label = STATUS_LABEL_MB[b.status] || b.status;
+  const notifyBtn = notifyPermission() === 'default'
+    ? `<button class="btn btn-ghost btn-sm" id="mb-notify">&#128276; Enable alerts</button>` : '';
   el.innerHTML = `
     <div class="ticket">
       <div>
@@ -224,11 +328,21 @@ async function renderMyBooking() {
       <span class="status-pill status-${b.status}">${label}</span>
     </div>
     <div class="row" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-      ${b.status === 'called' ? `<button class="btn btn-gold btn-sm" id="mb-checkin">I'm here</button>` : ''}
-      ${['booked', 'called'].includes(b.status) ? `<button class="btn btn-ghost btn-sm" id="mb-cancel">Cancel booking</button>` : ''}
-    </div>`;
+      ${['on_deck', 'called'].includes(b.status) ? `<button class="btn btn-gold btn-sm" id="mb-checkin">I'm here</button>` : ''}
+      ${['booked', 'on_deck', 'called'].includes(b.status) ? `<button class="btn btn-ghost btn-sm" id="mb-cancel">Cancel booking</button>` : ''}
+      ${notifyBtn}
+    </div>
+    <div id="mb-payment"></div>`;
 
-  if (b.status === 'called') startRing(); else stopRing();
+  if (ringingStatuses.includes(b.status)) startRing(); else stopRing();
+
+  if (ringingStatuses.includes(b.status) && b.status !== lastNotifiedStatus) {
+    notify(
+      b.status === 'on_deck' ? "You're 2 away at AlPhi Cuts" : "You're up next at AlPhi Cuts!",
+      b.status === 'on_deck' ? 'Two more people and it\'s your turn — head over now if you\'re not already there.' : 'Please be at the shop now, or your slot may go to someone else.'
+    );
+  }
+  lastNotifiedStatus = ringingStatuses.includes(b.status) ? b.status : null;
 
   const ci = $('#mb-checkin');
   if (ci) ci.addEventListener('click', async () => { try { await rpc('check_in', { p_token: token }); await renderMyBooking(); } catch (e) { alert(e.message); } });
@@ -237,9 +351,79 @@ async function renderMyBooking() {
     if (!confirm('Cancel this booking?')) return;
     try { await rpc('cancel_my_booking', { p_token: token }); await renderMyBooking(); await loadQueue(); await refreshSlotOptions(); } catch (e) { alert(e.message); }
   });
+  const nb = $('#mb-notify');
+  if (nb) nb.addEventListener('click', async () => { await requestNotifyPermission(); await renderMyBooking(); });
+
+  await renderPaymentSection(token);
 
   clearTimeout(myBookingTimer);
   myBookingTimer = setTimeout(renderMyBooking, 15000); // poll for status changes while this booking is active
+}
+
+// ---------------------------------------------------------------- online payment (manual, owner-gated)
+// No payment gateway: Alfred's own mobile money / bank details, only ever shown for a booking he has
+// personally approved, and only marked paid once he says so after receiving the money himself.
+async function renderPaymentSection(token) {
+  const box = $('#mb-payment');
+  if (!box) return;
+  let p;
+  try { p = await rpc('get_payment_details', { p_token: token }); p = Array.isArray(p) ? p[0] : p; } catch { box.innerHTML = ''; return; }
+  if (!p) { box.innerHTML = ''; return; }
+
+  if (p.payment_status === 'none') {
+    box.innerHTML = `<div class="payment-box"><button class="btn btn-ghost btn-sm" id="mb-pay-request">Ask to pay online</button></div>`;
+    $('#mb-pay-request').addEventListener('click', async () => {
+      try { await rpc('request_online_payment', { p_token: token }); await renderMyBooking(); } catch (e) { alert(e.message); }
+    });
+  } else if (p.payment_status === 'requested') {
+    box.innerHTML = `<div class="payment-box muted small">Waiting for Alfred to approve online payment for this booking&hellip;</div>`;
+  } else if (p.payment_status === 'approved') {
+    box.innerHTML = `
+      <div class="payment-box">
+        <div class="payment-disclaimer">&#9888;&#65039; Always confirm with Alfred before paying online. Only send money using the details below for <b>this booking</b>, after he has approved it here &mdash; AlPhi Cuts is not responsible for payments made outside this confirmation.</div>
+        <div><b>Amount due:</b> K${Number(p.amount_kwacha).toFixed(0)}</div>
+        <pre>${esc(p.instructions)}</pre>
+        <p class="small muted" style="margin:0">Once you've paid, let Alfred know (in person or via Chat) &mdash; he'll mark this as paid and your receipt will appear here.</p>
+      </div>`;
+  } else if (p.payment_status === 'paid') {
+    box.innerHTML = `
+      <div class="payment-box">
+        <div class="form-msg ok">&#9989; Payment received &mdash; thank you!</div>
+        <button class="btn btn-gold btn-sm" style="margin-top:10px" id="mb-receipt">Download receipt</button>
+      </div>`;
+    $('#mb-receipt').addEventListener('click', () => printReceipt(token));
+  }
+}
+
+async function printReceipt(token) {
+  let b, p;
+  try {
+    b = (await rpc('get_my_booking', { p_token: token }))[0];
+    p = await rpc('get_payment_details', { p_token: token });
+    p = Array.isArray(p) ? p[0] : p;
+  } catch (e) { alert(e.message); return; }
+  if (!b || !p || p.payment_status !== 'paid') { alert('Receipt not available yet.'); return; }
+  const paidDate = b.paid_at ? new Date(b.paid_at) : new Date();
+  $('#receipt-print').innerHTML = `
+    <div class="receipt-doc">
+      <img src="icons/logo.webp" class="r-logo" alt="">
+      <h2>${esc(p.shop_name)}</h2>
+      <div class="r-sub">Payment receipt</div>
+      <div class="r-stamp">PAID</div>
+      <table>
+        <tr><td>Client</td><td>${esc(b.client_name)}</td></tr>
+        <tr><td>Date</td><td>${b.booking_date}</td></tr>
+        <tr><td>Time</td><td>${fmtTime(b.slot_time.slice(0, 5))}</td></tr>
+        ${b.style_choice ? `<tr><td>Style</td><td>${esc(b.style_choice)}</td></tr>` : ''}
+        <tr><td>Paid on</td><td>${paidDate.toLocaleString()}</td></tr>
+        <tr class="r-total"><td>Total paid</td><td>K${Number(p.amount_kwacha).toFixed(0)}</td></tr>
+      </table>
+      <div class="r-foot">Booking ref: ${esc(token.slice(0, 10))}&hellip;<br>Thank you for choosing ${esc(p.shop_name)}.</div>
+    </div>`;
+  document.body.classList.add('printing-receipt');
+  const cleanup = () => { document.body.classList.remove('printing-receipt'); window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
 }
 
 // ---------------------------------------------------------------- reviews
@@ -316,14 +500,17 @@ $('#get-app-btn').addEventListener('click', async () => {
   }
 });
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.deferredInstallPrompt = e; });
+$('#qr-print-btn').addEventListener('click', () => window.print());
 
 // ---------------------------------------------------------------- wire up + boot
 $('#bk-submit').addEventListener('click', submitBooking);
 $('#rv-submit').addEventListener('click', submitReview);
 $('#chat-send').addEventListener('click', sendChat);
 $('#chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } });
+$('#sr-submit').addEventListener('click', submitStyleRequest);
 
 (async function boot() {
+  await loadDbStyles();
   renderStyleGallery();
   await loadSiteConfig();
   await Promise.all([loadQueue(), loadReviews(), loadChat(), renderMyBooking()]);

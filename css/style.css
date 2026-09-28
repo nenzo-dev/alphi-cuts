@@ -45,6 +45,16 @@ p { margin: 0 0 .8em; }
 .site-header .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; gap: 16px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; color: var(--text); }
 .brand .mark { width: 34px; height: 34px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), #a9791f); display: flex; align-items: center; justify-content: center; font-size: 18px; color: #171512; font-weight: 900; }
+.brand-logo { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.brand-logo-lg { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; display: block; margin: 0 auto 10px; }
+
+/* ---------- sitewide logo watermark ---------- */
+.bg-watermark {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: url('/icons/logo.webp') center 12vh no-repeat;
+  background-size: min(520px, 70vw);
+  opacity: .05;
+}
 .nav-links { display: flex; gap: 18px; }
 .nav-links a { color: var(--muted); font-size: 14px; font-weight: 600; }
 .nav-links a:hover { color: var(--gold-soft); text-decoration: none; }
@@ -124,6 +134,7 @@ textarea { resize: vertical; min-height: 80px; }
 .ticket { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .status-pill { padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
 .status-booked { background: rgba(184,173,154,.15); color: var(--muted); }
+.status-on_deck { background: rgba(224,165,65,.1); color: var(--warn); }
 .status-called { background: rgba(224,165,65,.18); color: var(--warn); }
 .status-checked_in { background: rgba(212,175,55,.18); color: var(--gold-soft); }
 .status-in_chair { background: rgba(76,175,125,.18); color: var(--good); }
@@ -174,3 +185,47 @@ th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spa
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; min-width: 130px; }
 .stat .n { font-size: 24px; font-weight: 800; color: var(--gold-soft); }
 .stat .l { font-size: 12px; color: var(--muted); }
+
+/* ---------- photo grids (styles tab, style requests) ---------- */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; margin: 10px 0; }
+.photo-thumb { position: relative; }
+.photo-thumb img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 8px; display: block; }
+.photo-thumb .photo-del { position: absolute; top: 3px; right: 3px; background: rgba(23,21,18,.85); color: var(--bad); border: none; border-radius: 999px; width: 22px; height: 22px; line-height: 1; cursor: pointer; font-size: 14px; }
+
+/* ---------- printable QR / receipt ---------- */
+#receipt-print { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  #get-app, #get-app * { visibility: visible; }
+  #get-app { position: absolute; inset: 0; padding: 60px 20px; text-align: center; }
+  #get-app .qr-box { justify-content: center; }
+  #get-app .qr-box img { width: 320px; height: 320px; }
+  #get-app-btn, #qr-print-btn { display: none; }
+
+  body.printing-receipt #get-app { display: none; }
+  body.printing-receipt #receipt-print,
+  body.printing-receipt #receipt-print * { visibility: visible; }
+  body.printing-receipt #receipt-print {
+    display: block; position: absolute; inset: 0; padding: 40px; color: #171512; background: #fff;
+  }
+}
+
+/* ---------- receipt ---------- */
+.receipt-doc { max-width: 420px; margin: 0 auto; font-family: 'Segoe UI', system-ui, sans-serif; }
+.receipt-doc .r-logo { width: 90px; height: 90px; display: block; margin: 0 auto 10px; border-radius: 16px; }
+.receipt-doc h2 { text-align: center; margin: 0 0 2px; }
+.receipt-doc .r-sub { text-align: center; color: #6b6255; font-size: 13px; margin-bottom: 18px; }
+.receipt-doc .r-stamp { text-align: center; font-weight: 900; letter-spacing: .08em; color: #4caf7d; border: 2px solid #4caf7d; border-radius: 8px; padding: 6px; margin-bottom: 18px; }
+.receipt-doc table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.receipt-doc td { padding: 7px 0; border-bottom: 1px dashed #ccc; }
+.receipt-doc td:last-child { text-align: right; font-weight: 700; }
+.receipt-doc .r-total td { border-bottom: none; border-top: 2px solid #171512; font-size: 17px; font-weight: 900; padding-top: 12px; }
+.receipt-doc .r-foot { text-align: center; font-size: 12px; color: #6b6255; margin-top: 22px; }
+
+/* ---------- barber-free banner ---------- */
+.free-banner { background: linear-gradient(135deg, var(--gold), var(--gold-soft)); color: #171512; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 18px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+
+/* ---------- payments ---------- */
+.payment-disclaimer { background: rgba(224,96,90,.1); border: 1px solid var(--bad); color: var(--text); border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 12px; }
+.payment-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-top: 10px; }
+.payment-box pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; background: var(--ink); border-radius: 8px; padding: 10px; margin: 8px 0; font-size: 14px; }
