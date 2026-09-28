@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AlPhi Cuts &mdash; Alfred Phiri's Barbershop</title>
+<meta name="description" content="Book your haircut in advance at AlPhi Cuts, Chongwe's best-rated barbershop. K50 any cut, with or without dye. See the queue before you leave home.">
+<meta name="theme-color" content="#171512">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container row">
+    <div class="brand"><span class="mark">A</span> <span id="hdr-shop-name">AlPhi Cuts</span></div>
+    <nav class="nav-links">
+      <a href="#styles">Styles</a>
+      <a href="#queue">Today's queue</a>
+      <a href="#book">Book now</a>
+      <a href="#reviews">Reviews</a>
+      <a href="#chat">Chat</a>
+      <a href="#contact">Contact</a>
+      <a href="#get-app">Get the app</a>
+    </nav>
+    <a href="#book" class="btn btn-gold btn-sm">Book now</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div class="rating-badge">
+      <span class="stars" id="hero-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+      <span id="hero-rating-text" class="muted">5.0 &middot; best-rated in Chongwe</span>
+    </div>
+    <h1 id="hero-shop-name">AlPhi Cuts</h1>
+    <p class="tagline" id="hero-tagline">Chongwe's best-rated barbershop &mdash; by Alfred Phiri</p>
+    <div class="price-pill" id="hero-price">Any haircut, with or without dye &mdash; K50</div>
+    <div class="hero-cta">
+      <a href="#book" class="btn btn-gold">Book your slot</a>
+      <a href="#queue" class="btn btn-ghost">See today's queue first</a>
+    </div>
+  </div>
+</section>
+
+<section id="styles">
+  <div class="container">
+    <div class="section-head">
+      <h2>Pick your style</h2>
+      <p class="muted">Browse real cuts done at the shop &mdash; tap one to see more angles, and it'll be pre-filled when you book.</p>
+    </div>
+    <div class="slot-grid" id="style-gallery" style="grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:14px"></div>
+  </div>
+</section>
+
+<section id="queue">
+  <div class="container">
+    <div class="section-head">
+      <h2>Today's queue</h2>
+      <p class="muted">Check before you leave home &mdash; see exactly how busy it is and when the next free slot is.</p>
+    </div>
+    <div class="card">
+      <div class="queue-summary" id="queue-summary">
+        <span class="muted">Loading today's queue&hellip;</span>
+      </div>
+      <div class="slot-grid" id="slot-grid"></div>
+    </div>
+  </div>
+</section>
+
+<section id="book">
+  <div class="container">
+    <div class="section-head">
+      <h2>Book your slot</h2>
+      <p class="muted">Open 8am &ndash; 8pm, every cut is 20 minutes. Pick a free time below.</p>
+    </div>
+    <div class="grid-2">
+      <div class="card" id="booking-card">
+        <div id="bk-style-chip" style="display:none;margin-bottom:10px" class="form-msg ok"></div>
+        <label for="bk-date">Date</label>
+        <select id="bk-date"></select>
+        <label for="bk-slot">Time</label>
+        <select id="bk-slot"></select>
+        <div class="field-row">
+          <div>
+            <label for="bk-name">Your name</label>
+            <input id="bk-name" placeholder="e.g. Mumba Chanda">
+          </div>
+          <div>
+            <label for="bk-phone">Phone number</label>
+            <input id="bk-phone" placeholder="09xx xxx xxx">
+          </div>
+        </div>
+        <button class="btn btn-gold btn-block" style="margin-top:16px" id="bk-submit">Book this slot</button>
+        <div id="bk-msg"></div>
+      </div>
+      <div class="card" id="my-booking-card">
+        <h3>My booking</h3>
+        <div id="my-booking-body" class="muted">You don't have an active booking on this device yet.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="reviews">
+  <div class="container">
+    <div class="section-head">
+      <h2>What people say</h2>
+      <p class="muted">Had a cut? Leave a rating &mdash; it helps other people find AlPhi Cuts.</p>
+    </div>
+    <div class="grid-2">
+      <div class="card" id="review-list"><p class="muted">Loading reviews&hellip;</p></div>
+      <div class="card">
+        <h3>Leave a review</h3>
+        <label for="rv-name">Your name (optional)</label>
+        <input id="rv-name" placeholder="Anonymous">
+        <label for="rv-rating">Rating</label>
+        <select id="rv-rating">
+          <option value="5">&#9733;&#9733;&#9733;&#9733;&#9733; &mdash; Excellent</option>
+          <option value="4">&#9733;&#9733;&#9733;&#9733; &mdash; Good</option>
+          <option value="3">&#9733;&#9733;&#9733; &mdash; Okay</option>
+          <option value="2">&#9733;&#9733; &mdash; Not great</option>
+          <option value="1">&#9733; &mdash; Poor</option>
+        </select>
+        <label for="rv-comment">Comment</label>
+        <textarea id="rv-comment" placeholder="How was your cut?"></textarea>
+        <button class="btn btn-gold btn-block" style="margin-top:12px" id="rv-submit">Submit review</button>
+        <div id="rv-msg"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="chat">
+  <div class="container">
+    <div class="section-head">
+      <h2>Chat with Alfred</h2>
+      <p class="muted">Got a question before you book? Send a message.</p>
+    </div>
+    <div class="card" style="max-width:520px">
+      <div class="chat-box" id="chat-box"></div>
+      <div class="chat-send">
+        <textarea id="chat-input" placeholder="Type a message&hellip;"></textarea>
+        <button class="btn btn-gold" id="chat-send">Send</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="container">
+    <div class="section-head">
+      <h2>Find us</h2>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <p id="ct-address" class="muted"></p>
+        <p id="ct-directions"></p>
+      </div>
+      <div class="card">
+        <div class="contact-grid" id="ct-contacts"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="get-app">
+  <div class="container">
+    <div class="section-head">
+      <h2>Get the app</h2>
+      <p class="muted">Scan to install &mdash; Android installs straight away; iPhone opens the web app (Add to Home Screen).</p>
+    </div>
+    <div class="card qr-box">
+      <img id="qr-image" alt="QR code to install the AlPhi Cuts app">
+      <div>
+        <p class="muted" style="margin-bottom:10px">Or tap below on this phone:</p>
+        <button class="btn btn-gold" id="get-app-btn">Get the app</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container center muted small">
+    <p><span id="ft-shop-name">AlPhi Cuts</span> &mdash; by <span id="ft-owner-name">Alfred Phiri</span></p>
+    <p><a href="admin.html">Owner login</a></p>
+  </div>
+</footer>
+
+<div id="modal-root"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

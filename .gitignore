@@ -1,0 +1,4 @@
+# The raw zip and its messy one-folder extraction stay local only -- img/styles/ (the cleaned,
+# organized copy the site actually uses) is what's committed.
+haircut-styles-src/
+*.zip

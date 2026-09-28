@@ -1,0 +1,15 @@
+{
+  "name": "AlPhi Cuts — Alfred Phiri's Barbershop",
+  "short_name": "AlPhi Cuts",
+  "description": "Book your haircut in advance. K50 any cut, with or without dye. Chongwe's best-rated barbershop.",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171512",
+  "theme_color": "#171512",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
