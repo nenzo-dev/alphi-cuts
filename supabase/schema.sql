@@ -76,6 +76,16 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'owner');
 $$;
 
+-- The shop is a single physical location in Chongwe, Zambia -- "today" for booking/queue purposes
+-- always means the calendar date in Africa/Lusaka, never the database session's own timezone (which
+-- on Supabase is UTC). Using bare current_date anywhere here was a real bug: since Zambia is UTC+2,
+-- current_date silently disagrees with the shop's actual date for the first two hours of every
+-- Zambia day (00:00-02:00 local, while UTC is still on the previous date).
+create or replace function public.shop_today()
+returns date language sql stable as $$
+  select (now() at time zone 'Africa/Lusaka')::date;
+$$;
+
 -- Self-service setup, the same concept as MindCare's own account creation: Alfred signs up right
 -- from the owner panel (supabase.auth.signUp, a normal account, no special power yet) and this is
 -- what actually makes that account the owner -- but ONLY the very first person to call it after the
@@ -232,7 +242,7 @@ returns table (slot_time time, status text, called_at timestamptz)
 language sql stable security definer set search_path = public as $$
   select slot_time, status, called_at
   from public.bookings
-  where booking_date = current_date
+  where booking_date = public.shop_today()
     and status not in ('cancelled')
   order by slot_time;
 $$;
@@ -250,7 +260,7 @@ declare
 begin
   select open_time, close_time, slot_minutes into v_open, v_close, v_slot_minutes from public.site_config where id = 1;
 
-  if p_date < current_date then
+  if p_date < public.shop_today() then
     raise exception 'That date has already passed.';
   end if;
   if p_slot < v_open or p_slot >= v_close then
@@ -441,17 +451,20 @@ end;
 $$;
 grant execute on function public.admin_mark_no_show(uuid) to authenticated;
 
--- For a walk-in with no online booking: Alfred adds them straight into today's queue.
+-- For a walk-in with no online booking: Alfred adds them straight into today's queue, right after
+-- whichever slot is currently the latest active booking (or at opening time if none yet).
 create or replace function public.admin_add_walkin(p_name text, p_phone text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_slot time;
+declare v_slot time; v_open time; v_slot_minutes int; v_today date;
 begin
   if not public.is_owner() then raise exception 'Owner access required.'; end if;
-  select coalesce(max(slot_time), (select open_time from public.site_config where id = 1) - interval '1 minute') + interval '1 minute'
+  select open_time, slot_minutes into v_open, v_slot_minutes from public.site_config where id = 1;
+  v_today := public.shop_today();
+  select coalesce(max(slot_time) + make_interval(mins => v_slot_minutes), v_open)
     into v_slot
-    from public.bookings where booking_date = current_date and status not in ('cancelled', 'no_show');
+    from public.bookings where booking_date = v_today and status not in ('cancelled', 'no_show');
   insert into public.bookings (booking_date, slot_time, client_name, client_phone, status)
-  values (current_date, v_slot, btrim(p_name), coalesce(nullif(btrim(p_phone), ''), 'walk-in'), 'checked_in');
+  values (v_today, v_slot, btrim(p_name), coalesce(nullif(btrim(p_phone), ''), 'walk-in'), 'checked_in');
 end;
 $$;
 grant execute on function public.admin_add_walkin(text, text) to authenticated;
