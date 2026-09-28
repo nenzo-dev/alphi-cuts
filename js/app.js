@@ -495,6 +495,19 @@ $('#get-app-btn').addEventListener('click', async () => {
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.deferredInstallPrompt = e; });
 $('#qr-print-btn').addEventListener('click', () => window.print());
 
+// ---------------------------------------------------------------- mobile nav
+const navLinks = $('#nav-links');
+const navToggle = $('#nav-toggle');
+function closeNav() { navLinks.classList.remove('open'); navToggle.setAttribute('aria-expanded', 'false'); }
+navToggle.addEventListener('click', () => {
+  const open = navLinks.classList.toggle('open');
+  navToggle.setAttribute('aria-expanded', String(open));
+});
+navLinks.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeNav));
+document.addEventListener('click', (e) => {
+  if (navLinks.classList.contains('open') && !navLinks.contains(e.target) && !navToggle.contains(e.target)) closeNav();
+});
+
 // ---------------------------------------------------------------- wire up + boot
 $('#bk-submit').addEventListener('click', submitBooking);
 $('#rv-submit').addEventListener('click', submitReview);
