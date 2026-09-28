@@ -40,7 +40,14 @@
 </div>
 
 <div class="admin-shell" id="admin-shell" style="display:none">
-  <aside class="admin-side">
+  <div class="admin-topbar">
+    <button class="nav-toggle" id="admin-nav-toggle" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="brand"><img src="icons/logo.webp" alt="" class="brand-logo"> Owner Panel</div>
+  </div>
+  <div class="admin-side-backdrop" id="admin-side-backdrop"></div>
+  <aside class="admin-side" id="admin-side">
     <div class="brand" style="margin-bottom:18px"><img src="icons/logo.webp" alt="" class="brand-logo"> Owner Panel</div>
     <a href="#queue" data-tab="queue" class="active">Today's queue</a>
     <a href="#bookings" data-tab="bookings">All bookings</a>

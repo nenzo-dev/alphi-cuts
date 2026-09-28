@@ -108,9 +108,25 @@ function showAdmin() {
   $('#login-screen').style.display = 'none';
   $('#admin-shell').style.display = 'flex';
   wireTabs();
+  wireMobileNav();
   loadQueueTab();
   loadShopTab();
   $('#logout-link').addEventListener('click', async (e) => { e.preventDefault(); await signOutOwner(); location.reload(); });
+}
+
+// ---------------------------------------------------------------- mobile nav drawer
+function wireMobileNav() {
+  const side = $('#admin-side');
+  const backdrop = $('#admin-side-backdrop');
+  const toggle = $('#admin-nav-toggle');
+  const close = () => { side.classList.remove('open'); backdrop.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); };
+  toggle.addEventListener('click', () => {
+    const open = side.classList.toggle('open');
+    backdrop.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+  });
+  backdrop.addEventListener('click', close);
+  side.querySelectorAll('a[data-tab]').forEach((a) => a.addEventListener('click', close));
 }
 
 // ---------------------------------------------------------------- tabs
