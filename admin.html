@@ -3,194 +3,299 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Owner Panel &mdash; AlPhi Cuts</title>
-<meta name="robots" content="noindex">
-<link rel="icon" href="icons/logo.webp" type="image/webp">
+<title>Owner panel | AlPhi Cuts</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#171512">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="preconnect" href="https://dbiojclfbqmvpvmqsfhv.supabase.co" crossorigin>
 <link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous" defer></script>
 </head>
 <body>
 <div class="bg-watermark" aria-hidden="true"></div>
 
 <div id="login-screen" class="modal-backdrop">
   <div class="modal">
-    <div id="login-mode">
-      <h3><img src="icons/logo.webp" alt="" class="brand-logo-lg"> Owner login</h3>
+    <form id="login-mode" novalidate>
+      <img src="icons/logo-96.webp" alt="" class="brand-logo-lg" width="56" height="56">
+      <h3 class="center">Owner login</h3>
       <label for="lg-email">Email</label>
-      <input id="lg-email" type="email" placeholder="alfred@example.com">
+      <input id="lg-email" type="email" autocomplete="username" required>
       <label for="lg-pass">Password</label>
-      <input id="lg-pass" type="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
-      <button class="btn btn-gold btn-block" style="margin-top:14px" id="lg-go">Sign in</button>
+      <input id="lg-pass" type="password" autocomplete="current-password" required>
+      <label class="check-inline"><input type="checkbox" id="lg-keep"> Keep me signed in on this device</label>
+      <button class="btn btn-gold btn-block" type="submit" id="lg-go">Sign in</button>
       <div id="lg-msg"></div>
       <p class="small muted" style="margin-top:14px" id="lg-setup-link"></p>
-    </div>
-    <div id="setup-mode" style="display:none">
-      <h3 id="su-title">Set up the owner account</h3>
-      <p class="small muted" id="su-intro">This shop has no owner account yet. Whoever sets this up first becomes the owner &mdash; do this once, as Alfred.</p>
+      <p class="small"><a href="./">&larr; Back to the site</a></p>
+    </form>
+    <form id="setup-mode" novalidate hidden>
+      <h3 id="su-title">Create an account</h3>
+      <p class="small muted" id="su-intro"></p>
       <label for="su-name">Your name</label>
-      <input id="su-name" placeholder="Alfred Phiri">
+      <input id="su-name" autocomplete="name" maxlength="60">
       <label for="su-email">Email</label>
-      <input id="su-email" type="email" placeholder="alfred@example.com">
+      <input id="su-email" type="email" autocomplete="username">
       <label for="su-pass">Choose a password</label>
-      <input id="su-pass" type="password" placeholder="At least 8 characters">
-      <button class="btn btn-gold btn-block" style="margin-top:14px" id="su-go">Create owner account</button>
+      <input id="su-pass" type="password" autocomplete="new-password">
+      <p class="hint">At least 8 characters, with letters and numbers.</p>
+      <button class="btn btn-gold btn-block" type="submit" id="su-go">Create account</button>
       <div id="su-msg"></div>
-      <p class="small muted" style="margin-top:14px"><a href="#" id="su-back">Already have an account? Sign in</a></p>
-    </div>
+      <p class="small muted" style="margin-top:14px"><button type="button" class="link-btn" id="su-back">Already have an account? Sign in</button></p>
+    </form>
   </div>
 </div>
 
-<div class="admin-shell" id="admin-shell" style="display:none">
+<div class="admin-shell" id="admin-shell" hidden>
   <div class="admin-topbar">
-    <button class="nav-toggle" id="admin-nav-toggle" aria-label="Menu" aria-expanded="false">
+    <button class="nav-toggle" id="admin-nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="admin-side">
       <span></span><span></span><span></span>
     </button>
-    <div class="brand"><img src="icons/logo.webp" alt="" class="brand-logo"> Owner Panel</div>
+    <div class="brand"><img src="icons/logo-96.webp" alt="" class="brand-logo" width="34" height="34"> <span>Owner panel</span></div>
   </div>
   <div class="admin-side-backdrop" id="admin-side-backdrop"></div>
-  <aside class="admin-side" id="admin-side">
-    <div class="brand" style="margin-bottom:18px"><img src="icons/logo.webp" alt="" class="brand-logo"> Owner Panel</div>
-    <a href="#queue" data-tab="queue" class="active">Today's queue</a>
+  <nav class="admin-side" id="admin-side" aria-label="Owner panel">
+    <div class="brand" style="margin-bottom:10px"><img src="icons/logo-96.webp" alt="" class="brand-logo" width="34" height="34"> <span>Owner panel</span></div>
+    <div class="side-group">Today</div>
+    <a href="#queue" data-tab="queue">Queue</a>
     <a href="#bookings" data-tab="bookings">All bookings</a>
+    <a href="#chat" data-tab="chat">Messages <span class="badge" id="badge-chat" hidden></span></a>
+    <a href="#payments" data-tab="payments">Payments <span class="badge" id="badge-pay" hidden></span></a>
+    <div class="side-group">Customers</div>
     <a href="#feedback" data-tab="feedback">Reviews</a>
-    <a href="#chat" data-tab="chat">Messages</a>
-    <a href="#styles" data-tab="styles">Haircut styles</a>
     <a href="#requests" data-tab="requests">Style requests</a>
-    <a href="#payments" data-tab="payments">Payments</a>
-    <a href="#owners" data-tab="owners">Owners</a>
+    <div class="side-group">Website</div>
+    <a href="#hours" data-tab="hours">Hours &amp; slots</a>
     <a href="#shop" data-tab="shop">Shop details</a>
-    <a href="#" id="logout-link" style="margin-top:20px">Sign out</a>
-    <a href="index.html" class="muted">&larr; View public site</a>
-  </aside>
+    <a href="#page" data-tab="page">Public page</a>
+    <a href="#legal" data-tab="legal">Legal pages</a>
+    <a href="#styles" data-tab="styles">Haircut styles</a>
+    <div class="side-group">Account</div>
+    <a href="#owners" data-tab="owners">Owners</a>
+    <a href="#" id="logout-link">Sign out</a>
+    <div class="side-foot">
+      <a href="./" target="_blank" rel="noopener">View the site &#8599;</a>
+      <p class="small muted" style="margin:8px 12px 0" id="admin-version"></p>
+    </div>
+  </nav>
 
   <main class="admin-main">
-    <section id="tab-queue">
+    <div id="db-warning" class="form-msg error db-warning" hidden>
+      The database hasn't had the version 2 update yet, so slot length, booking window, reminders, closed days,
+      page text and legal pages can't be saved. Run <b>supabase/migrations/09_v2_settings_and_hardening.sql</b>
+      once in the Supabase SQL editor, then reload this page.
+    </div>
+
+    <section data-panel="queue">
       <h2>Today's queue</h2>
       <div class="stat-row" id="queue-stats"></div>
       <div class="card">
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <input id="wi-name" placeholder="Walk-in name" style="max-width:200px">
-          <input id="wi-phone" placeholder="Phone (optional)" style="max-width:160px">
-          <button class="btn btn-sm" id="wi-add">Add walk-in</button>
+        <form class="inline-form" id="walkin-form" novalidate>
+          <label class="sr-only" for="wi-name">Walk-in name</label>
+          <input id="wi-name" placeholder="Walk-in name" maxlength="60">
+          <label class="sr-only" for="wi-phone">Phone (optional)</label>
+          <input id="wi-phone" type="tel" placeholder="Phone (optional)" maxlength="20">
+          <button class="btn btn-gold" type="submit" id="wi-add">Add walk-in</button>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th>Style</th><th>Status</th><th></th></tr></thead>
+            <tbody id="queue-table"></tbody>
+          </table>
         </div>
-        <table>
-          <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th>Style</th><th>Status</th><th></th></tr></thead>
-          <tbody id="queue-table"></tbody>
-        </table>
       </div>
     </section>
 
-    <section id="tab-bookings" style="display:none">
+    <section data-panel="bookings" hidden>
       <h2>All bookings</h2>
-      <input type="date" id="bk-date-filter" style="max-width:200px;margin-bottom:14px">
+      <div class="day-nav">
+        <button type="button" class="btn btn-sm" id="bk-prev" aria-label="Previous day">&larr;</button>
+        <label class="sr-only" for="bk-date-filter">Day</label>
+        <input type="date" id="bk-date-filter">
+        <button type="button" class="btn btn-sm" id="bk-next" aria-label="Next day">&rarr;</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="bk-today">Today</button>
+      </div>
       <div class="card">
-        <table>
-          <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th>Status</th></tr></thead>
-          <tbody id="bookings-table"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th>Style</th><th>Status</th><th>Payment</th><th></th></tr></thead>
+            <tbody id="bookings-table"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
-    <section id="tab-feedback" style="display:none">
+    <section data-panel="chat" hidden>
+      <h2>Messages</h2>
+      <div class="grid-2">
+        <div class="card thread-list" id="thread-list"></div>
+        <div class="card">
+          <p class="small muted" id="thread-title">Pick a conversation.</p>
+          <div class="chat-box" id="admin-chat-box"></div>
+          <form class="chat-send" id="admin-chat-form" novalidate>
+            <label class="sr-only" for="admin-chat-input">Reply</label>
+            <textarea id="admin-chat-input" maxlength="2000" placeholder="Reply&hellip;"></textarea>
+            <button class="btn btn-gold" type="submit" id="admin-chat-send">Send</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section data-panel="payments" hidden>
+      <h2>Payments</h2>
+      <form class="card" id="pay-form" novalidate>
+        <h3>Your payment details</h3>
+        <p class="payment-note">Only approve online payment for bookings you'll accept, and only mark a booking paid once the money is in your account. These details are shown only to clients you approve.</p>
+        <label for="pc-instructions">Mobile money or bank details</label>
+        <textarea id="pc-instructions" maxlength="1000" placeholder="e.g. MTN Mobile Money: 097xxxxxxx (Alfred Phiri)"></textarea>
+        <button class="btn btn-gold" type="submit" id="pc-save" style="margin-top:12px">Save payment details</button>
+        <div id="pc-msg"></div>
+      </form>
+      <div class="card">
+        <h3>Waiting for you</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th><th></th></tr></thead>
+            <tbody id="payments-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section data-panel="feedback" hidden>
       <h2>Reviews</h2>
+      <p class="muted small tab-intro">New reviews stay hidden until you publish them.</p>
       <div class="card" id="feedback-list"></div>
     </section>
 
-    <section id="tab-chat" style="display:none">
-      <h2>Messages</h2>
-      <div class="grid-2">
-        <div class="card" id="thread-list" style="max-height:480px;overflow-y:auto"></div>
-        <div class="card">
-          <div class="chat-box" id="admin-chat-box"></div>
-          <div class="chat-send">
-            <textarea id="admin-chat-input" placeholder="Reply&hellip;"></textarea>
-            <button class="btn btn-gold" id="admin-chat-send">Send</button>
-          </div>
-        </div>
-      </div>
+    <section data-panel="requests" hidden>
+      <h2>Style requests</h2>
+      <p class="muted small tab-intro">Styles clients described or sent a photo of because they weren't in the gallery.</p>
+      <div class="card" id="requests-list"></div>
     </section>
 
-    <section id="tab-styles" style="display:none">
+    <section data-panel="hours" hidden>
+      <h2>Hours &amp; slots</h2>
+      <form class="card" id="hours-form" novalidate>
+        <div class="field-row">
+          <div><label for="hr-open">Opens</label><input id="hr-open" type="time" required></div>
+          <div><label for="hr-close">Closes</label><input id="hr-close" type="time" required></div>
+        </div>
+        <div class="field-row">
+          <div>
+            <label for="hr-slot">Minutes per slot</label>
+            <select id="hr-slot"></select>
+          </div>
+          <div>
+            <label for="hr-days">Days ahead people can book</label>
+            <input id="hr-days" type="number" min="1" max="60" step="1">
+          </div>
+        </div>
+        <label for="hr-reminder">Heads-up before a client's slot (minutes)</label>
+        <input id="hr-reminder" type="number" min="0" max="120" step="1">
+        <p class="hint">Clients get a chime and notification this many minutes before their slot, and the page rings when the slot starts. Use 0 for no heads-up.</p>
+        <label>Closed on</label>
+        <div class="check-row" id="hr-closed"></div>
+        <div class="preview-box" id="hr-preview"></div>
+        <p class="hint">Existing bookings keep their times. New bookings use the new slots.</p>
+        <button class="btn btn-gold" type="submit" id="hr-save" style="margin-top:14px">Save hours &amp; slots</button>
+        <div id="hr-msg"></div>
+      </form>
+    </section>
+
+    <section data-panel="shop" hidden>
+      <h2>Shop details</h2>
+      <form class="card" id="shop-form" novalidate>
+        <label for="sc-shop_name">Shop name</label><input id="sc-shop_name" maxlength="60">
+        <label for="sc-tagline">Tagline</label><input id="sc-tagline" maxlength="160">
+        <label for="sc-owner_name">Owner name</label><input id="sc-owner_name" maxlength="60">
+        <label for="sc-address_line">Address</label><input id="sc-address_line" maxlength="200">
+        <label for="sc-directions_text">Directions</label><textarea id="sc-directions_text" maxlength="1000"></textarea>
+        <label for="sc-about_text">About the shop (optional, shown under "Find us")</label><textarea id="sc-about_text" maxlength="2000"></textarea>
+        <div class="field-row">
+          <div><label for="sc-phone">Phone</label><input id="sc-phone" type="tel" maxlength="30"></div>
+          <div><label for="sc-whatsapp">WhatsApp number</label><input id="sc-whatsapp" type="tel" maxlength="30"></div>
+        </div>
+        <div class="field-row">
+          <div><label for="sc-facebook">Facebook link</label><input id="sc-facebook" type="url" placeholder="https://" maxlength="300"></div>
+          <div><label for="sc-instagram">Instagram link</label><input id="sc-instagram" type="url" placeholder="https://" maxlength="300"></div>
+        </div>
+        <div class="field-row">
+          <div><label for="sc-price_kwacha">Price (K)</label><input id="sc-price_kwacha" type="number" min="0" step="1"></div>
+          <div><label for="sc-rating">Rating (0 to 5)</label><input id="sc-rating" type="number" min="0" max="5" step="0.1"></div>
+          <div><label for="sc-rating_count">Number of reviews</label><input id="sc-rating_count" type="number" min="0" step="1"></div>
+        </div>
+        <button class="btn btn-gold" type="submit" id="sc-save" style="margin-top:16px">Save shop details</button>
+        <div id="sc-msg"></div>
+      </form>
+    </section>
+
+    <section data-panel="page" hidden>
+      <h2>Public page</h2>
+      <form id="page-form" novalidate>
+        <div class="card">
+          <label for="pg-announcement">Announcement bar (optional)</label>
+          <input id="pg-announcement" maxlength="300" placeholder="e.g. Closed on Friday 10 October for a family event">
+          <p class="hint">Shown across the top of every page. Leave empty to hide it.</p>
+          <label>Sections to show</label>
+          <div class="check-row" id="pg-sections"></div>
+        </div>
+        <div class="card">
+          <h3>Wording</h3>
+          <p class="small muted">Change any text on the public page. These placeholders are filled in for you:</p>
+          <p class="small" id="pg-placeholders"></p>
+          <div id="pg-groups"></div>
+        </div>
+        <div class="sticky-save">
+          <button class="btn btn-gold" type="submit" id="pg-save">Save public page</button>
+          <a href="./" target="_blank" rel="noopener" class="btn btn-ghost">Open the site</a>
+          <div id="pg-msg"></div>
+        </div>
+      </form>
+    </section>
+
+    <section data-panel="legal" hidden>
+      <h2>Legal pages</h2>
+      <p class="muted small tab-intro">Formatting: start a line with <b># </b> or <b>## </b> for a heading, <b>- </b> for a list item, and wrap words in <b>**</b> for bold. Leave a blank line between paragraphs. {shop}, {owner}, {owner_first} and {slot} are filled in for you.</p>
+      <form id="legal-form" class="legal-editor" novalidate>
+        <div id="legal-docs"></div>
+        <div class="sticky-save">
+          <button class="btn btn-gold" type="submit" id="lg-save">Save legal pages</button>
+          <div id="legal-msg"></div>
+        </div>
+      </form>
+    </section>
+
+    <section data-panel="styles" hidden>
       <h2>Haircut styles</h2>
       <div class="card">
-        <p class="muted small">Add extra styles beyond the built-in gallery &mdash; clients will see these too when picking a style to book.</p>
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <input id="st-label" placeholder="Style name, e.g. Taper Fade + Beard" style="max-width:280px">
-          <button class="btn btn-sm btn-gold" id="st-add">Add style</button>
-        </div>
+        <p class="muted small">Add styles on top of the built-in gallery. Clients see them in "Pick your style".</p>
+        <form class="inline-form" id="style-form" novalidate>
+          <label class="sr-only" for="st-label">Style name</label>
+          <input id="st-label" placeholder="Style name, e.g. Taper Fade + Beard" maxlength="60">
+          <button class="btn btn-gold" type="submit" id="st-add">Add style</button>
+        </form>
         <div id="st-msg"></div>
         <div id="styles-list"></div>
       </div>
     </section>
 
-    <section id="tab-requests" style="display:none">
-      <h2>Style requests</h2>
-      <p class="muted small">Styles clients described or uploaded a photo of because they didn't see it in the gallery.</p>
-      <div class="card" id="requests-list"></div>
-    </section>
-
-    <section id="tab-payments" style="display:none">
-      <h2>Payments</h2>
-      <div class="card">
-        <h3 style="margin-top:0">Your online payment details</h3>
-        <div class="payment-disclaimer">&#9888;&#65039; Strict rule: only approve a booking for online payment when you genuinely intend to accept it, and only click <b>Mark paid</b> after you have personally confirmed the money actually reached you. These details are never shown publicly &mdash; only to a client whose specific booking you approve below.</div>
-        <label for="pc-instructions">Mobile money / bank details clients should pay to</label>
-        <textarea id="pc-instructions" placeholder="e.g. MTN Mobile Money: 097xxxxxxx (Alfred Phiri)"></textarea>
-        <button class="btn btn-gold" style="margin-top:12px" id="pc-save">Save payment details</button>
-        <div id="pc-msg"></div>
-      </div>
-      <div class="card">
-        <h3 style="margin-top:0">Bookings awaiting payment action</h3>
-        <table>
-          <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th><th></th></tr></thead>
-          <tbody id="payments-table"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="tab-owners" style="display:none">
+    <section data-panel="owners" hidden>
       <h2>Owners</h2>
       <div class="card">
-        <p class="muted small">Add another owner by email. That person must have already created an account (they can do this from the login screen &mdash; it just won't make them an owner until you add them here). At least one owner must always remain.</p>
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <input id="ow-email" type="email" placeholder="email@example.com" style="max-width:280px">
-          <button class="btn btn-sm btn-gold" id="ow-add">Add owner</button>
-        </div>
+        <p class="muted small">To add a co-owner, they first create an account from the login page ("Create an account"). Then add their email here. At least one owner must remain.</p>
+        <form class="inline-form" id="owner-form" novalidate>
+          <label class="sr-only" for="ow-email">Email</label>
+          <input id="ow-email" type="email" placeholder="email@example.com">
+          <button class="btn btn-gold" type="submit" id="ow-add">Add owner</button>
+        </form>
         <div id="ow-msg"></div>
-        <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Added</th><th></th></tr></thead>
-          <tbody id="owners-table"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="tab-shop" style="display:none">
-      <h2>Shop details</h2>
-      <div class="card">
-        <label>Shop name</label><input id="sc-shop_name">
-        <label>Tagline</label><input id="sc-tagline">
-        <label>Owner name</label><input id="sc-owner_name">
-        <label>Address line</label><input id="sc-address_line">
-        <label>Directions</label><textarea id="sc-directions_text"></textarea>
-        <label>About</label><textarea id="sc-about_text"></textarea>
-        <div class="field-row">
-          <div><label>Phone</label><input id="sc-phone"></div>
-          <div><label>WhatsApp number</label><input id="sc-whatsapp"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Added</th><th></th></tr></thead>
+            <tbody id="owners-table"></tbody>
+          </table>
         </div>
-        <div class="field-row">
-          <div><label>Facebook URL</label><input id="sc-facebook"></div>
-          <div><label>Instagram URL</label><input id="sc-instagram"></div>
-        </div>
-        <div class="field-row">
-          <div><label>Price (K)</label><input id="sc-price_kwacha" type="number"></div>
-          <div><label>Rating (0&ndash;5)</label><input id="sc-rating" type="number" step="0.1"></div>
-          <div><label>Rating count</label><input id="sc-rating_count" type="number"></div>
-        </div>
-        <div class="field-row">
-          <div><label>Opens</label><input id="sc-open_time" type="time"></div>
-          <div><label>Closes</label><input id="sc-close_time" type="time"></div>
-        </div>
-        <button class="btn btn-gold" style="margin-top:16px" id="sc-save">Save changes</button>
-        <div id="sc-msg"></div>
       </div>
     </section>
   </main>

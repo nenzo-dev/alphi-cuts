@@ -3,48 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>AlPhi Cuts &mdash; Alfred Phiri's Barbershop</title>
-<meta name="description" content="Book your haircut in advance at AlPhi Cuts, Chongwe's best-rated barbershop. K50 any cut, with or without dye. See the queue before you leave home.">
+<title>AlPhi Cuts | Book a haircut</title>
+<meta name="description" content="Book your haircut online and check the queue before you leave home.">
 <meta name="theme-color" content="#171512">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/logo.webp" type="image/webp">
-<link rel="apple-touch-icon" href="icons/logo.webp">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://dbiojclfbqmvpvmqsfhv.supabase.co" crossorigin>
 <link rel="stylesheet" href="css/style.css">
+<link rel="modulepreload" href="js/app.js">
+<link rel="modulepreload" href="js/config.js">
+<link rel="modulepreload" href="js/lib/api.js">
+<link rel="modulepreload" href="js/lib/ui.js">
+<link rel="modulepreload" href="js/lib/slots.js">
+<link rel="modulepreload" href="js/lib/content.js">
+<link rel="modulepreload" href="js/lib/client.js">
+<link rel="modulepreload" href="js/lib/alarm.js">
+<link rel="modulepreload" href="js/lib/ringtone.js">
+<link rel="modulepreload" href="js/lib/notify.js">
+<link rel="modulepreload" href="js/lib/ics.js">
+<link rel="modulepreload" href="js/lib/image.js">
+<link rel="modulepreload" href="js/styles-data.js">
 </head>
 <body>
+<a class="skip-link" href="#book">Skip to booking</a>
 <div class="bg-watermark" aria-hidden="true"></div>
+<div class="announcement" id="announcement" role="note" hidden></div>
 
 <header class="site-header">
   <div class="container row">
-    <div class="brand"><img src="icons/logo.webp" alt="" class="brand-logo"> <span id="hdr-shop-name">AlPhi Cuts</span></div>
-    <nav class="nav-links" id="nav-links">
-      <a href="#styles">Styles</a>
-      <a href="#queue">Today's queue</a>
-      <a href="#book">Book now</a>
-      <a href="#reviews">Reviews</a>
-      <a href="#chat">Chat</a>
-      <a href="#contact">Contact</a>
-      <a href="#get-app">Get the app</a>
+    <a class="brand" href="./"><img src="icons/logo-96.webp" alt="" class="brand-logo" width="34" height="34"> <span data-shop-name>AlPhi Cuts</span></a>
+    <nav class="nav-links" id="nav-links" aria-label="Main">
+      <a href="#styles" data-section="styles" data-c="nav_styles">Styles</a>
+      <a href="#queue" data-section="queue" data-c="nav_queue">Queue</a>
+      <a href="#book" data-section="book" data-c="nav_book">Book</a>
+      <a href="#reviews" data-section="reviews" data-c="nav_reviews">Reviews</a>
+      <a href="#chat" data-section="chat" data-c="nav_chat">Chat</a>
+      <a href="#contact" data-section="contact" data-c="nav_contact">Find us</a>
+      <a href="#get-app" data-section="get-app" data-c="nav_app">Get the app</a>
     </nav>
-    <a href="#book" class="btn btn-gold btn-sm">Book now</a>
-    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false">
+    <a href="#book" class="btn btn-gold btn-sm header-cta" data-needs="book" data-c="header_book">Book now</a>
+    <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
       <span></span><span></span><span></span>
     </button>
   </div>
 </header>
 
+<main id="main">
 <section class="hero">
   <div class="container">
     <div class="rating-badge">
-      <span class="stars" id="hero-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
-      <span id="hero-rating-text" class="muted">5.0 &middot; best-rated in Chongwe</span>
+      <span class="stars" id="hero-stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+      <span id="hero-rating-text" class="muted">5.0 &middot; Best-rated in Chongwe</span>
     </div>
-    <h1 id="hero-shop-name">AlPhi Cuts</h1>
-    <p class="tagline" id="hero-tagline">Chongwe's best-rated barbershop &mdash; by Alfred Phiri</p>
-    <div class="price-pill" id="hero-price">Any haircut, with or without dye &mdash; K50</div>
+    <h1 data-shop-name>AlPhi Cuts</h1>
+    <p class="tagline" id="hero-tagline">Chongwe's best-rated barbershop</p>
+    <div class="price-pill" data-c="hero_price">Any haircut, with or without dye: K50</div>
     <div class="hero-cta">
-      <a href="#book" class="btn btn-gold">Book your slot</a>
-      <a href="#queue" class="btn btn-ghost">See today's queue first</a>
+      <a href="#book" class="btn btn-gold" data-needs="book" data-c="hero_book">Book your slot</a>
+      <a href="#queue" class="btn btn-ghost" data-needs="queue" data-c="hero_queue">See today's queue</a>
     </div>
   </div>
 </section>
@@ -52,21 +69,21 @@
 <section id="styles">
   <div class="container">
     <div class="section-head">
-      <h2>Pick your style</h2>
-      <p class="muted">Browse real cuts done at the shop &mdash; tap one to see more angles, and it'll be pre-filled when you book.</p>
+      <h2 data-c="styles_title">Pick your style</h2>
+      <p class="muted" data-c="styles_intro">Tap a style to see more photos. If you like it, we'll add it to your booking.</p>
     </div>
-    <div class="slot-grid" id="style-gallery" style="grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:14px"></div>
+    <div class="style-grid" id="style-gallery"></div>
 
-    <div class="card" style="margin-top:20px;max-width:520px">
-      <h3>Can't find the style you want?</h3>
-      <p class="muted small">Describe it, or upload a photo of it, and Alfred will see it before your cut.</p>
-      <label for="sr-desc">Describe the style (optional if you upload a photo)</label>
-      <textarea id="sr-desc" placeholder="e.g. Skin fade with a hard part and a beard line-up"></textarea>
-      <label for="sr-photo">Reference photo (optional)</label>
+    <form class="card request-card" id="sr-form" novalidate>
+      <h3 data-c="request_title">Can't find your style?</h3>
+      <p class="muted small" data-c="request_intro">Describe it or send a photo so the barber knows what you're after.</p>
+      <label for="sr-desc">Describe the style</label>
+      <textarea id="sr-desc" maxlength="500" placeholder="e.g. Skin fade with a hard part and a beard line-up"></textarea>
+      <label for="sr-photo">Photo (optional)</label>
       <input id="sr-photo" type="file" accept="image/*">
-      <button class="btn btn-gold btn-block" style="margin-top:12px" id="sr-submit">Send to Alfred</button>
+      <button class="btn btn-gold btn-block" type="submit" id="sr-submit" data-c="request_button">Send</button>
       <div id="sr-msg"></div>
-    </div>
+    </form>
   </div>
 </section>
 
@@ -74,15 +91,16 @@
   <div class="container">
     <div id="free-banner-slot"></div>
     <div class="section-head">
-      <h2>Today's queue</h2>
-      <p class="muted">Check before you leave home &mdash; see exactly how busy it is and when the next free slot is.</p>
+      <h2 data-c="queue_title">Today's queue</h2>
+      <p class="muted" data-c="queue_intro">Check how busy the shop is before you leave home.</p>
     </div>
     <div class="card">
-      <div class="queue-summary" id="queue-summary">
-        <span class="muted">Loading today's queue&hellip;</span>
-      </div>
+      <div class="queue-summary" id="queue-summary" aria-live="polite"><span class="muted">Loading today's queue&hellip;</span></div>
       <div class="slot-grid" id="slot-grid"></div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:14px;display:none" id="notify-free-btn">&#128276; Notify me when Alfred is free</button>
+      <div class="slot-legend" aria-hidden="true">
+        <span><i class="dot free"></i> Free</span><span><i class="dot taken"></i> Booked</span><span><i class="dot now"></i> In the chair</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" id="notify-free-btn" data-c="queue_notify" hidden>Tell me when the barber is free</button>
     </div>
   </div>
 </section>
@@ -90,32 +108,33 @@
 <section id="book">
   <div class="container">
     <div class="section-head">
-      <h2>Book your slot</h2>
-      <p class="muted">Open 8am &ndash; 8pm, every cut is 20 minutes. Pick a free time below.</p>
+      <h2 data-c="book_title">Book your slot</h2>
+      <p class="muted" data-c="book_intro">Open 9am to 8pm. Each slot is 30 minutes.</p>
     </div>
     <div class="grid-2">
-      <div class="card" id="booking-card">
-        <div id="bk-style-chip" style="display:none;margin-bottom:10px" class="form-msg ok"></div>
-        <label for="bk-date">Date</label>
-        <select id="bk-date"></select>
-        <label for="bk-slot">Time</label>
-        <select id="bk-slot"></select>
+      <form class="card" id="booking-form" novalidate>
+        <div id="bk-style-chip" class="style-chip" hidden></div>
         <div class="field-row">
           <div>
-            <label for="bk-name">Your name</label>
-            <input id="bk-name" placeholder="e.g. Mumba Chanda">
+            <label for="bk-date">Day</label>
+            <select id="bk-date"></select>
           </div>
           <div>
-            <label for="bk-phone">Phone number</label>
-            <input id="bk-phone" placeholder="09xx xxx xxx">
+            <label for="bk-slot">Time</label>
+            <select id="bk-slot"><option value="">Loading&hellip;</option></select>
           </div>
         </div>
-        <button class="btn btn-gold btn-block" style="margin-top:16px" id="bk-submit">Book this slot</button>
+        <label for="bk-name">Your name</label>
+        <input id="bk-name" name="name" autocomplete="name" maxlength="60" placeholder="e.g. Mumba Chanda">
+        <label for="bk-phone">Phone number</label>
+        <input id="bk-phone" name="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="09xx xxx xxx">
+        <button class="btn btn-gold btn-block btn-lg" type="submit" id="bk-submit" data-c="book_button">Book this slot</button>
+        <p class="small muted form-note">By booking you agree to our <a href="terms.html">terms</a> and <a href="privacy.html">privacy policy</a>.</p>
         <div id="bk-msg"></div>
-      </div>
+      </form>
       <div class="card" id="my-booking-card">
-        <h3>My booking</h3>
-        <div id="my-booking-body" class="muted">You don't have an active booking on this device yet.</div>
+        <h3 data-c="my_title">My booking</h3>
+        <div id="my-booking-body"><p class="muted" data-c="my_empty">No booking on this device yet.</p></div>
       </div>
     </div>
   </div>
@@ -124,28 +143,28 @@
 <section id="reviews">
   <div class="container">
     <div class="section-head">
-      <h2>What people say</h2>
-      <p class="muted">Had a cut? Leave a rating &mdash; it helps other people find AlPhi Cuts.</p>
+      <h2 data-c="reviews_title">What people say</h2>
+      <p class="muted" data-c="reviews_intro">Had a cut here? Leave a rating.</p>
     </div>
     <div class="grid-2">
-      <div class="card" id="review-list"><p class="muted">Loading reviews&hellip;</p></div>
-      <div class="card">
-        <h3>Leave a review</h3>
+      <div class="card" id="review-list" aria-live="polite"><p class="muted">Loading reviews&hellip;</p></div>
+      <form class="card" id="review-form" novalidate>
+        <h3 data-c="review_form_title">Leave a review</h3>
         <label for="rv-name">Your name (optional)</label>
-        <input id="rv-name" placeholder="Anonymous">
+        <input id="rv-name" maxlength="60" autocomplete="given-name" placeholder="Anonymous">
         <label for="rv-rating">Rating</label>
         <select id="rv-rating">
-          <option value="5">&#9733;&#9733;&#9733;&#9733;&#9733; &mdash; Excellent</option>
-          <option value="4">&#9733;&#9733;&#9733;&#9733; &mdash; Good</option>
-          <option value="3">&#9733;&#9733;&#9733; &mdash; Okay</option>
-          <option value="2">&#9733;&#9733; &mdash; Not great</option>
-          <option value="1">&#9733; &mdash; Poor</option>
+          <option value="5">&#9733;&#9733;&#9733;&#9733;&#9733; Excellent</option>
+          <option value="4">&#9733;&#9733;&#9733;&#9733; Good</option>
+          <option value="3">&#9733;&#9733;&#9733; Okay</option>
+          <option value="2">&#9733;&#9733; Not great</option>
+          <option value="1">&#9733; Poor</option>
         </select>
         <label for="rv-comment">Comment</label>
-        <textarea id="rv-comment" placeholder="How was your cut?"></textarea>
-        <button class="btn btn-gold btn-block" style="margin-top:12px" id="rv-submit">Submit review</button>
+        <textarea id="rv-comment" maxlength="1000" placeholder="How was your cut?"></textarea>
+        <button class="btn btn-gold btn-block" type="submit" id="rv-submit">Submit review</button>
         <div id="rv-msg"></div>
-      </div>
+      </form>
     </div>
   </div>
 </section>
@@ -153,15 +172,17 @@
 <section id="chat">
   <div class="container">
     <div class="section-head">
-      <h2>Chat with Alfred</h2>
-      <p class="muted">Got a question before you book? Send a message.</p>
+      <h2 data-c="chat_title">Chat with the barber</h2>
+      <p class="muted" data-c="chat_intro">Questions before you book? Send a message.</p>
     </div>
-    <div class="card" style="max-width:520px">
-      <div class="chat-box" id="chat-box"></div>
-      <div class="chat-send">
-        <textarea id="chat-input" placeholder="Type a message&hellip;"></textarea>
-        <button class="btn btn-gold" id="chat-send">Send</button>
-      </div>
+    <div class="card chat-card">
+      <div class="chat-box" id="chat-box" aria-live="polite"><p class="muted small" data-c="chat_empty">No messages yet.</p></div>
+      <form class="chat-send" id="chat-form" novalidate>
+        <label class="sr-only" for="chat-input">Message</label>
+        <textarea id="chat-input" maxlength="1000" placeholder="Type a message&hellip;"></textarea>
+        <button class="btn btn-gold" type="submit" id="chat-send">Send</button>
+      </form>
+      <div id="chat-msg"></div>
     </div>
   </div>
 </section>
@@ -169,12 +190,13 @@
 <section id="contact">
   <div class="container">
     <div class="section-head">
-      <h2>Find us</h2>
+      <h2 data-c="contact_title">Find us</h2>
     </div>
     <div class="grid-2">
       <div class="card">
-        <p id="ct-address" class="muted"></p>
-        <p id="ct-directions"></p>
+        <p id="ct-address" class="ct-address"></p>
+        <p id="ct-directions" class="muted"></p>
+        <p id="ct-about" hidden></p>
       </div>
       <div class="card">
         <div class="contact-grid" id="ct-contacts"></div>
@@ -186,29 +208,35 @@
 <section id="get-app">
   <div class="container">
     <div class="section-head">
-      <h2>Get the app</h2>
-      <p class="muted">Scan to install &mdash; Android installs straight away; iPhone opens the web app (Add to Home Screen).</p>
+      <h2 data-c="app_title">Get the app</h2>
+      <p class="muted" data-c="app_intro">Scan the code with your phone camera. Android installs it straight away. On iPhone, open the site in Safari, tap Share, then Add to Home Screen.</p>
     </div>
     <div class="card qr-box">
-      <img id="qr-image" alt="QR code to install the AlPhi Cuts app">
-      <div>
-        <p class="muted" style="margin-bottom:10px">Or tap below on this phone:</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-gold" id="get-app-btn">Get the app</button>
-          <button class="btn btn-ghost" id="qr-print-btn">&#128424;&#65039; Print QR code</button>
-        </div>
+      <img id="qr-image" alt="QR code for this website" width="160" height="160" loading="lazy">
+      <div class="qr-actions">
+        <button class="btn btn-gold" type="button" id="get-app-btn" data-c="app_install">Install the app</button>
+        <button class="btn btn-ghost" type="button" id="qr-print-btn" data-c="app_print">Print QR code</button>
       </div>
     </div>
   </div>
 </section>
+</main>
 
-<footer>
-  <div class="container center muted small">
-    <p><span id="ft-shop-name">AlPhi Cuts</span> &mdash; by <span id="ft-owner-name">Alfred Phiri</span></p>
-    <p><a href="admin.html">Owner login</a></p>
+<footer class="site-footer">
+  <div class="container center">
+    <p><strong data-shop-name>AlPhi Cuts</strong> &middot; <span id="ft-owner-name">Alfred Phiri</span></p>
+    <p class="muted small" id="ft-note" data-c="footer_note" hidden></p>
+    <nav class="footer-links" aria-label="Legal">
+      <a href="privacy.html">Privacy policy</a>
+      <a href="terms.html">Terms of use</a>
+      <a href="disclaimer.html">Disclaimer</a>
+      <a href="admin.html">Owner login</a>
+    </nav>
+    <p class="small muted">Developed by <a href="developers.html">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.0.0</span></p>
   </div>
 </footer>
 
+<div id="alarm-root"></div>
 <div id="modal-root"></div>
 <div id="receipt-print"></div>
 

@@ -1,11 +1,14 @@
-// Minimal service worker: exists mainly so Chrome/Android consider this site installable (a PWA
-// needs one registered fetch handler to qualify), plus a network-first pass on the site's own
-// static files so it still opens (even if stale) with a flaky connection -- network-first (not
-// cache-first) matters here because this site ships real updates often; a cache-first strategy
-// would permanently stick returning visitors on whatever was cached on their first visit, since
-// nothing about a same-named cache forces a re-fetch just because the deployed files changed.
-const CACHE = 'alphicuts-v2';
-const CORE = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/config.js', 'manifest.webmanifest'];
+// Service worker: makes the site installable, lets it open on a flaky connection, and brings the
+// booking page forward when an alert notification is tapped.
+// Pages and code are network-first so updates show up straight away; images are cache-first.
+const VERSION = '2.0.0';
+const CACHE = `alphicuts-${VERSION}`;
+const CORE = [
+  './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/logo-96.webp', 'icons/logo-512.webp',
+  'js/app.js', 'js/config.js', 'js/styles-data.js',
+  'js/lib/api.js', 'js/lib/ui.js', 'js/lib/slots.js', 'js/lib/content.js', 'js/lib/client.js',
+  'js/lib/alarm.js', 'js/lib/ringtone.js', 'js/lib/notify.js', 'js/lib/ics.js', 'js/lib/image.js',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}));
@@ -13,21 +16,46 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
+function store(request, response) {
+  if (response && response.ok && response.type === 'basic') {
+    const copy = response.clone();
+    caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+  }
+  return response;
+}
+
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  // Never cache API/database calls -- only this site's own static files.
-  if (url.origin !== self.location.origin) return;
+  const { request } = event;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return; // database and other sites: never cached here
+
+  if (url.pathname.includes('/img/') || url.pathname.includes('/icons/')) {
+    event.respondWith(caches.match(request).then((hit) => hit || fetch(request).then((res) => store(request, res))));
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(event.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match(event.request))
+    fetch(request)
+      .then((res) => store(request, res))
+      .catch(async () => (await caches.match(request)) || (request.mode === 'navigate' ? caches.match('./') : Response.error())),
   );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './#book';
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows.find((w) => new URL(w.url).origin === self.location.origin);
+    if (existing) return existing.focus();
+    return self.clients.openWindow(target);
+  })());
 });

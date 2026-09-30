@@ -2,3 +2,4 @@
 # organized copy the site actually uses) is what's committed.
 haircut-styles-src/
 *.zip
+__pycache__/

@@ -1,8 +1,6 @@
-// Thin wrapper around the browser Notification API. Safe to call even where notifications aren't
-// supported or haven't been granted yet -- every function is a no-op in that case rather than an
-// error, since none of this is required for the site to work (the ringtone + on-screen ticket
-// already carry the "you're up" signal; this just adds an OS-level nudge when granted).
-
+// System notifications. Android Chrome refuses `new Notification()` from a page, so these go
+// through the service worker when one is registered. Everything here fails quietly: the ringing
+// and the on-screen alert still work without notification permission.
 export function notifySupported() {
   return typeof Notification !== 'undefined';
 }
@@ -17,10 +15,25 @@ export async function requestNotifyPermission() {
   try { return await Notification.requestPermission(); } catch { return Notification.permission; }
 }
 
-export function notify(title, body) {
+export async function notify(title, body, { tag = 'alphi-cuts', urgent = false } = {}) {
   if (!notifySupported() || Notification.permission !== 'granted') return;
+  const options = {
+    body,
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag,
+    renotify: true,
+    requireInteraction: urgent,
+    vibrate: urgent ? [500, 200, 500, 200, 800] : [200, 100, 200],
+    data: { url: location.href.split('#')[0] + '#book' },
+  };
   try {
-    const n = new Notification(title, { body, icon: 'icons/icon.svg', tag: 'alphi-cuts-queue' });
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (reg) {
+      await reg.showNotification(title, options);
+      return;
+    }
+    const n = new Notification(title, options);
     n.onclick = () => { window.focus(); n.close(); };
-  } catch { /* some browsers throw if the page isn't in a state that allows this -- ignore */ }
+  } catch { /* not allowed right now */ }
 }

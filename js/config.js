@@ -1,32 +1,13 @@
-// Site-wide settings. Everything here is safe to publish (no secrets) -- the Supabase anon key is
-// designed to be public; every real permission check happens in the database (row-level security
-// and the SECURITY DEFINER functions in supabase/schema.sql), never in this file.
-//
-// Paste your Supabase Project URL and "anon public" key below (Supabase dashboard -> Project
-// Settings -> API) once you've created the project and run supabase/schema.sql in its SQL editor.
-// Until then, the app shows a one-time setup screen where you can paste them in instead, kept in
-// this browser only -- handy for trying the site before editing this file.
-const SUPABASE = {
-  url: 'https://dbiojclfbqmvpvmqsfhv.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRiaW9qY2xmYnFtdnB2bXFzZmh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MDE5MDIsImV4cCI6MjEwNjE3NzkwMn0.mVHW9t3J1LUPzIqxzhccXm07JanRTwXt41rJwfLgU8A',
-};
-
-function savedSetup() {
-  try {
-    const b = JSON.parse(localStorage.getItem('ac_bootstrap') || 'null');
-    if (b && /^https:\/\/[\w.-]+$/.test(b.url || '') && typeof b.anonKey === 'string' && b.anonKey.length > 20) return b;
-  } catch { /* storage unavailable */ }
-  return null;
-}
-const chosen = SUPABASE.url && SUPABASE.anonKey ? SUPABASE : savedSetup();
+// Public settings. The Supabase anon key is meant to be public: the database itself decides what
+// each caller may do (row-level security and the functions in supabase/schema.sql).
+export const VERSION = '2.0.0';
 
 export const CONFIG = {
   shortName: 'AlPhi Cuts',
-  fullName: "AlPhi Cuts — Alfred Phiri's Barbershop",
   siteUrl: 'https://alphi-cuts.pages.dev/',
-  supabase: chosen ? { url: chosen.url.replace(/\/+$/, ''), anonKey: chosen.anonKey } : { url: '', anonKey: '' },
+  timeZone: 'Africa/Lusaka',
+  supabase: {
+    url: 'https://dbiojclfbqmvpvmqsfhv.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRiaW9qY2xmYnFtdnB2bXFzZmh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MDE5MDIsImV4cCI6MjEwNjE3NzkwMn0.mVHW9t3J1LUPzIqxzhccXm07JanRTwXt41rJwfLgU8A',
+  },
 };
-
-export function saveBootstrap(url, anonKey) {
-  try { localStorage.setItem('ac_bootstrap', JSON.stringify({ url, anonKey })); } catch { /* ignore */ }
-}

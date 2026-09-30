@@ -4,7 +4,7 @@
     {
       "name": "alphicuts",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8130"],
+      "runtimeArgs": ["tools/serve.py", "8130"],
       "port": 8130
     }
   ]
