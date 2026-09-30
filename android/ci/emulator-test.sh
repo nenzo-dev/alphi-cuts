@@ -90,10 +90,14 @@ grep -qF "WatchService" "$OUT/services.txt" && pass "booking watcher is running"
 # Close the app completely: leave it, then kill its process. Alarms live in the system, not the app.
 adb shell input keyevent KEYCODE_HOME
 sleep 2
-PID=$(adb shell pidof "$DBG" | tr -d '\r')
-if [ -n "$PID" ]; then adb shell kill -9 "$PID"; fi
+PID=$(adb shell pidof "$DBG" | tr -d '\r' | awk '{print $1}')
+if [ -n "$PID" ]; then
+  # The debug build can kill its own process (run-as needs no root); root is the fallback.
+  adb shell run-as "$DBG" kill -9 "$PID" 2>/dev/null || adb shell kill -9 "$PID" 2>/dev/null
+fi
 sleep 1
-NEWPID=$(adb shell pidof "$DBG" | tr -d '\r')
+NEWPID=$(adb shell pidof "$DBG" | tr -d '\r' | awk '{print $1}')
+echo "app process before: ${PID:-none}, after: ${NEWPID:-none}" | tee -a "$OUT/results.txt"
 if [ -n "$PID" ] && [ "$NEWPID" != "$PID" ]; then pass "app process was killed"; else fail "could not kill the app process"; fi
 adb shell input keyevent KEYCODE_SLEEP
 
