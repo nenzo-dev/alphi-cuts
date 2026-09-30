@@ -23,6 +23,16 @@ This page explains what {shop} collects through this website, why we collect it,
 
 We don't use advertising or tracking cookies, and we never sell your information.
 
+## The Android app
+
+The app shows this same website, so everything on this page applies to it. On top of that:
+
+- It keeps your booking time and the private code for each booking on your phone, so it can set alarms for them.
+- On the day of a booking, from about two hours before your slot until it ends, it checks your booking and any replies from the shop every so often, even when the app is closed. While it does this, Android shows a "Keeping an eye on your booking" notification.
+- It asks to show notifications, set alarms, show a full-screen alert when it's your turn, and run in the background. You can turn any of these off in your phone's settings, but alerts may then not work.
+
+The app has no ads or trackers, and it doesn't use your contacts, location, camera or microphone. It only reads a photo if you choose one to send with a style request. Uninstalling the app deletes everything it stored on your phone.
+
 ## Why we use it
 
 - To hold your slot and run the queue
@@ -84,6 +94,12 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 - Don't try to break, overload or misuse the site, or get at information that isn't yours.
 - We may change or pause parts of the site, including online booking, at any time.
 
+## The Android app
+
+- Only install the app from this website. A copy from anywhere else may not be genuine.
+- When the app says a new version is ready, please update it.
+- These terms apply to the app too. We may change or stop offering the app at any time.
+
 ## Liability
 
 We work to keep the site accurate and running, but it's provided as it is. {shop} isn't responsible for losses caused by the site being unavailable, by delays in the queue, or by payments made outside the process described above. Nothing in these terms takes away rights you have under Zambian law.
@@ -109,7 +125,9 @@ Hair dye and some hair products can cause allergic reactions. If you have sensit
 
 ## Queue, times and alerts
 
-The queue and times on this site depend on the shop keeping them up to date, so treat them as a guide. Alerts and ringing only work while this site is open on your device, and your phone's settings (silent mode, battery saver, blocked notifications) can stop them. Adding your booking to your calendar is the most reliable reminder. Please keep an eye on the time yourself.
+The queue and times on this site depend on the shop keeping them up to date, so treat them as a guide.
+
+The Android app rings when your slot starts even when the app is closed, as long as you allow its notifications, alarms and background use. Some phones' battery savers can still stop it, and the sound follows your phone's alarm volume. On iPhone and in a web browser, alerts only work while this site is open; adding your booking to your calendar is the most reliable reminder there. Please keep an eye on the time yourself.
 
 ## Payments
 

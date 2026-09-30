@@ -18,7 +18,23 @@ hosted on Cloudflare Pages.
   payments, moderate reviews, and change hours, slot length, booking window, reminder time,
   closed days, every piece of wording on the public page, which sections show, and the legal pages.
 - Reviews, chat, a style gallery with photo requests, manual mobile-money payments with receipts,
-  privacy policy, terms of use and disclaimer. Installable as an app.
+  privacy policy, terms of use and disclaimer.
+- **Android app** (`android/`): shows the website and sets real phone alarms for each booking, so it
+  rings at the slot time even when the app is closed. iPhones use Add to Home Screen instead, and
+  must keep the site open for alerts.
+
+## Android app
+
+The app is plain Java with no libraries. `.github/workflows/android.yml` builds it on every push
+that changes `android/`, runs `android/ci/emulator-test.sh` on an Android emulator (the alarm must
+ring with the app closed and the screen off), and publishes it to `app/alphi-cuts.apk` on the
+website. Screenshots from the latest test are on the `android-ci` release on GitHub.
+
+Publishing needs the repository secret `ANDROID_SIGNING`: line 1 the keystore password, line 2
+the PKCS12 keystore in base64. The keystore is kept outside this repository. Every version must be
+signed with the same key or phones won't install the update; the workflow refuses to publish an
+APK whose certificate doesn't match `RELEASE_CERT_SHA256`. To release a new version, raise
+`versionCode` and `versionName` in `android/app/build.gradle`.
 
 ## Security
 

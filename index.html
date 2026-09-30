@@ -29,6 +29,7 @@
 <a class="skip-link" href="#book">Skip to booking</a>
 <div class="bg-watermark" aria-hidden="true"></div>
 <div class="announcement" id="announcement" role="note" hidden></div>
+<div class="announcement" id="app-update" role="note" hidden>A new version of the app is ready. <a href="app/alphi-cuts.apk">Update now</a></div>
 
 <header class="site-header">
   <div class="container row">
@@ -209,12 +210,36 @@
   <div class="container">
     <div class="section-head">
       <h2 data-c="app_title">Get the app</h2>
-      <p class="muted" data-c="app_intro">Scan the code with your phone camera. Android installs it straight away. On iPhone, open the site in Safari, tap Share, then Add to Home Screen.</p>
+      <p class="muted" data-c="app_intro">Get an alert on your phone when it's your turn.</p>
+    </div>
+    <div class="grid-2 app-platforms">
+      <div class="card app-card" id="app-android">
+        <h3>Android</h3>
+        <p data-c="app_android_text">The Android app rings when your slot starts, even when the app is closed.</p>
+        <div id="apk-ready" hidden>
+          <a class="btn btn-gold btn-block" id="apk-link" href="app/alphi-cuts.apk" download="AlPhi-Cuts.apk" data-c="app_android_button">Download for Android</a>
+          <p class="small muted" id="apk-meta"></p>
+          <ol class="steps small">
+            <li>Tap Download, then open the file when it finishes.</li>
+            <li>If your phone asks, allow installs from your browser, then tap Install.</li>
+            <li>Open AlPhi Cuts, book, and tap <b>Turn on alerts</b>.</li>
+          </ol>
+        </div>
+        <div id="apk-missing">
+          <p class="small muted">The Android app is on its way. Until then, open this site in Chrome and choose "Add to Home screen" from the menu.</p>
+          <button class="btn btn-ghost" type="button" id="pwa-install-btn" hidden>Add to Home screen</button>
+        </div>
+      </div>
+      <div class="card app-card" id="app-ios">
+        <h3>iPhone</h3>
+        <p data-c="app_ios_text">Open this site in Safari, tap Share, then Add to Home Screen.</p>
+        <p class="small muted" data-c="app_ios_note">On iPhone, alerts ring only while the site is open. On the day of your booking, keep it open in Safari (it can stay in the background), and add the booking to your calendar as a backup.</p>
+      </div>
     </div>
     <div class="card qr-box">
-      <img id="qr-image" alt="QR code for this website" width="160" height="160" loading="lazy">
-      <div class="qr-actions">
-        <button class="btn btn-gold" type="button" id="get-app-btn" data-c="app_install">Install the app</button>
+      <img id="qr-image" alt="QR code for this page" width="160" height="160" loading="lazy">
+      <div>
+        <p class="small muted" style="margin-bottom:10px">Scan with your phone camera to open this page.</p>
         <button class="btn btn-ghost" type="button" id="qr-print-btn" data-c="app_print">Print QR code</button>
       </div>
     </div>
@@ -232,7 +257,7 @@
       <a href="disclaimer">Disclaimer</a>
       <a href="admin">Owner login</a>
     </nav>
-    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.0.1</span></p>
+    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.1.0</span></p>
   </div>
 </footer>
 

@@ -77,7 +77,8 @@ export const TEXT_GROUPS = [
       book_done: ['After booking', "You're booked for {time}, {date}. Please be on time: if you're not here when it's your turn, the slot may go to the next person."],
       my_title: ['"My booking" heading', 'My booking'],
       my_empty: ['No booking yet', 'No booking on this device yet.'],
-      my_alert_note: ['Alert note', "This page rings when your slot starts. Keep it open, or add the booking to your calendar."],
+      my_alert_note: ['Alert note (website)', "This page rings when your slot starts. Keep it open, or add the booking to your calendar."],
+      my_alert_note_app: ['Alert note (Android app)', "The app rings when your slot starts, even when it's closed."],
     },
   },
   {
@@ -112,8 +113,11 @@ export const TEXT_GROUPS = [
     keys: {
       contact_title: ['"Find us" heading', 'Find us'],
       app_title: ['App heading', 'Get the app'],
-      app_intro: ['App intro', 'Scan the code with your phone camera. Android installs it straight away. On iPhone, open the site in Safari, tap Share, then Add to Home Screen.'],
-      app_install: ['Install button', 'Install the app'],
+      app_intro: ['App intro', "Get an alert on your phone when it's your turn."],
+      app_android_text: ['Android text', 'The Android app rings when your slot starts, even when the app is closed.'],
+      app_android_button: ['Android download button', 'Download for Android'],
+      app_ios_text: ['iPhone text', 'Open this site in Safari, tap Share, then Add to Home Screen.'],
+      app_ios_note: ['iPhone note', 'On iPhone, alerts ring only while the site is open. On the day of your booking, keep it open in Safari (it can stay in the background), and add the booking to your calendar as a backup.'],
       app_print: ['Print button', 'Print QR code'],
       footer_note: ['Extra footer line (optional)', ''],
     },

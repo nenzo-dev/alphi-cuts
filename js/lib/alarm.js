@@ -54,7 +54,8 @@ function messageFor(phase, b) {
   if (phase === 'due') return text('alert_now', vars);
   if (phase === 'called') return text('alert_called', vars);
   if (phase === 'on_deck') return text('alert_on_deck', vars);
-  return text('alert_reminder', vars);
+  const reminder = text('alert_reminder', vars);
+  return minsLeft === 1 ? reminder.replace('1 minutes', '1 minute') : reminder;
 }
 
 function flashTitle(on) {

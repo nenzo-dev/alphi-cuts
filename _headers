@@ -14,3 +14,9 @@
 
 /sw.js
   Cache-Control: no-cache
+
+/app/*
+  Cache-Control: no-cache
+
+/app/alphi-cuts.apk
+  Content-Disposition: attachment; filename="AlPhi-Cuts.apk"

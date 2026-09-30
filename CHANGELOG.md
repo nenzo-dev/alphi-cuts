@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.0 (2026-09-30)
+
+### Added
+- Android app (`android/`). It shows the website and adds real phone alarms: a heads-up before
+  the slot and a full-screen ringing alert when it starts, even when the app is closed or the
+  phone has restarted. On the day of a booking it also alerts when the barber calls you early
+  and when the shop replies in the chat.
+- "Get the app" downloads the Android app on Android phones. iPhones keep Add to Home Screen,
+  with a note to keep the site open for alerts.
+- The app offers updates when a newer version is published.
+- Privacy policy, terms and disclaimer cover the Android app.
+- GitHub Actions builds the app, tests on an Android emulator that it rings with the app closed,
+  checks it is signed with the shop's key, and only then publishes it to `/app/alphi-cuts.apk`.
+
 ## 2.0.1 (2026-09-30)
 
 - Links go straight to the final page addresses (Cloudflare was redirecting every `.html` link,

@@ -260,6 +260,14 @@ form .btn-block, .card .btn-block { margin-top: 16px; }
 /* ---------- contact / app ---------- */
 .ct-address { font-weight: 700; font-size: 16px; }
 .contact-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.app-platforms { margin-bottom: 20px; }
+.app-card h3 { margin-bottom: 6px; }
+.app-card .btn-block { margin-top: 8px; }
+.steps { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
+.steps li { margin-bottom: 4px; }
+#apk-meta { margin: 8px 0 0; }
+.ok-text { color: #7fd3a6; font-weight: 700; margin: 0; }
+.announcement a { color: var(--ink); text-decoration: underline; font-weight: 800; }
 .qr-box { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
 .qr-box img { background: #fff; padding: 10px; border-radius: 10px; width: 160px; height: 160px; }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }

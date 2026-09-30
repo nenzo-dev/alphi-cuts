@@ -1,7 +1,7 @@
 // Service worker: makes the site installable, lets it open on a flaky connection, and brings the
 // booking page forward when an alert notification is tapped.
 // Pages and code are network-first so updates show up straight away; images are cache-first.
-const VERSION = '2.0.1';
+const VERSION = '2.1.0';
 const CACHE = `alphicuts-${VERSION}`;
 const CORE = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/logo-96.webp', 'icons/logo-512.webp',
@@ -36,6 +36,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // database and other sites: never cached here
+  if (url.pathname.startsWith('/app/')) return;    // the Android app download is always fetched fresh
 
   if (url.pathname.includes('/img/') || url.pathname.includes('/icons/')) {
     event.respondWith(caches.match(request).then((hit) => hit || fetch(request).then((res) => store(request, res))));

@@ -47,6 +47,16 @@ function normalizeConfig(row) {
 
 const ownerFirst = () => (cfg && cfg.owner_name.split(/\s+/)[0]) || 'the barber';
 
+// Inside the Android app, window.AlphiAndroid connects to the phone's own alarms, which ring even
+// when the app is closed. In a browser the in-page alarm (lib/alarm.js) is used instead.
+const android = window.AlphiAndroid && typeof window.AlphiAndroid.syncBookings === 'function' ? window.AlphiAndroid : null;
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function appStatus() {
+  if (!android) return null;
+  try { return JSON.parse(android.info()); } catch { return null; }
+}
+
 // ---------------------------------------------------------------- shop settings and page text
 function renderConfig() {
   const c = cfg;
@@ -74,7 +84,7 @@ function renderConfig() {
   $('#app-version').textContent = `v${VERSION}`;
 
   for (const id of SECTION_IDS) {
-    const hide = c.hidden.has(id);
+    const hide = c.hidden.has(id) || (android && id === 'get-app');
     const section = document.getElementById(id);
     if (section) section.hidden = hide;
     $$(`[data-section="${id}"], [data-needs="${id}"]`).forEach((el) => { el.hidden = hide; });
@@ -82,7 +92,7 @@ function renderConfig() {
 
   renderContact();
   buildDateOptions();
-  if (!c.hidden.has('get-app')) buildQrCode();
+  if (!c.hidden.has('get-app') && !android) buildQrCode();
   configureAlarms({
     text: (k, v) => t(k, v), onCheckIn: doCheckIn, toast,
     slotMinutes: c.slot_minutes, reminderMinutes: c.reminder_minutes, title: document.title,
@@ -400,6 +410,10 @@ async function submitBooking(e) {
       const token = await rpcOr('book_slot', { ...args, p_device: deviceToken() }, () => rpc('book_slot', args), 'book_slot+device');
       addBookingToken(token);
       showMsg(msg, t('book_done', { time: fmtTime(slot), date: fmtDate(date) }), 'ok');
+      const st = appStatus();
+      if (android && st && !st.ready) {
+        try { android.requestAlerts(); } catch { /* older app */ }
+      }
       $('#bk-name').value = '';
       $('#bk-phone').value = '';
       setStyle('');
@@ -436,7 +450,7 @@ async function refreshMyBookings() {
   if (!tokens.length) {
     myRows = [];
     renderMyBookings();
-    updateAlarms([]);
+    setAlarms([]);
     return;
   }
   try {
@@ -450,11 +464,39 @@ async function refreshMyBookings() {
 
     myRows = sortBookings(keep);
     renderMyBookings();
-    updateAlarms(keep.filter((r) => WAITING.includes(r.status)));
+    setAlarms(keep);
   } finally {
     const active = myRows.some((r) => WAITING.includes(r.status) || r.status === 'in_chair');
     if (bookingTokens().length) myPollTimer = setTimeout(() => refreshMyBookings().catch(() => {}), active ? 15000 : 60000);
   }
+}
+
+function setAlarms(rows) {
+  if (!android) {
+    updateAlarms(rows.filter((r) => WAITING.includes(r.status)));
+    return;
+  }
+  if (!cfg) return;
+  const payload = {
+    api: { url: CONFIG.supabase.url, key: CONFIG.supabase.anonKey },
+    device: hasDeviceToken() ? deviceToken() : '',
+    shop: cfg.shop_name,
+    ownerFirst: ownerFirst(),
+    reminderMinutes: cfg.reminder_minutes,
+    slotMinutes: cfg.slot_minutes,
+    texts: {
+      reminder: t('alert_reminder', { mins: '{mins}' }),
+      now: t('alert_now'),
+      called: t('alert_called'),
+      onDeck: t('alert_on_deck'),
+    },
+    tokens: bookingTokens(),
+    bookings: rows.filter((r) => ['booked', 'on_deck', 'called'].includes(r.status)).map((r) => {
+      const start = shopTimeToEpoch(r.booking_date, r.slot_time);
+      return { token: r.client_token, id: r.id, status: r.status, startMs: start, endMs: start + cfg.slot_minutes * 60000, label: fmtTime(r.slot_time) };
+    }),
+  };
+  try { android.syncBookings(JSON.stringify(payload)); } catch { /* an older app without this call */ }
 }
 
 function countdown(b) {
@@ -501,7 +543,7 @@ function ticketHtml(b) {
   if (isToday && ['booked', 'on_deck', 'called'].includes(b.status)) {
     actions.push(`<button type="button" class="btn btn-gold btn-sm" data-act="checkin" data-token="${token}">I'm here</button>`);
   }
-  if (active && startsIn(b) > 0) {
+  if (active && startsIn(b) > 0 && !android) {
     actions.push(`<button type="button" class="btn btn-ghost btn-sm" data-act="calendar" data-token="${token}">Add to calendar</button>`);
   }
   if (active) actions.push(`<button type="button" class="btn btn-ghost btn-sm" data-act="cancel" data-token="${token}">Cancel</button>`);
@@ -528,13 +570,27 @@ function renderMyBookings() {
     return;
   }
   const hasActive = myRows.some((r) => WAITING.includes(r.status));
-  const needsSetup = notifyPermission() === 'default' || !audioUnlocked();
-  body.innerHTML = myRows.map(ticketHtml).join('') + (hasActive ? `
-    <div class="alert-setup">
-      <p class="small muted">${esc(t('my_alert_note'))}</p>
-      ${needsSetup ? '<button type="button" class="btn btn-ghost btn-sm" data-act="alerts">Turn on alerts</button>' : ''}
-    </div>` : '');
+  body.innerHTML = myRows.map(ticketHtml).join('') + (hasActive ? alertSetupHtml() : '');
   loadPaymentDetails();
+}
+
+function alertSetupHtml() {
+  if (android) {
+    const st = appStatus();
+    return `
+    <div class="alert-setup">
+      <p class="small muted">${esc(t('my_alert_note_app'))}</p>
+      ${st && st.ready
+        ? '<p class="small ok-text">Alerts are on.</p>'
+        : `<button type="button" class="btn btn-gold btn-sm" data-act="alerts">Turn on alerts</button><p class="small muted">Needed so the app can ring when it's closed.</p>`}
+    </div>`;
+  }
+  const needsSetup = notifyPermission() === 'default' || !audioUnlocked();
+  return `
+    <div class="alert-setup">
+      <p class="small muted">${esc(t(isIOS ? 'app_ios_note' : 'my_alert_note'))}</p>
+      ${needsSetup ? '<button type="button" class="btn btn-ghost btn-sm" data-act="alerts">Turn on alerts</button>' : ''}
+    </div>`;
 }
 
 async function loadPaymentDetails() {
@@ -565,6 +621,10 @@ async function doCheckIn(token) {
 }
 
 async function enableAlerts() {
+  if (android) {
+    try { android.requestAlerts(); } catch { /* older app */ }
+    return;
+  }
   unlockAudio();
   const perm = await requestNotifyPermission();
   chime({ force: true });
@@ -612,7 +672,16 @@ async function printReceipt(b) {
       <div class="r-foot">Booking ref: ${esc(String(b.id).slice(0, 8).toUpperCase())}<br>Thank you for choosing ${esc(p.shop_name)}.</div>
     </div>`;
   document.body.classList.add('printing-receipt');
-  const cleanup = () => { document.body.classList.remove('printing-receipt'); window.removeEventListener('afterprint', cleanup); };
+  const cleanup = () => {
+    document.body.classList.remove('printing-receipt');
+    window.removeEventListener('afterprint', cleanup);
+    window.removeEventListener('alphiapp', cleanup);
+  };
+  if (android) {
+    window.addEventListener('alphiapp', cleanup); // fired when the app comes back from the print screen
+    try { android.print(); } catch { cleanup(); }
+    return;
+  }
   window.addEventListener('afterprint', cleanup);
   window.print();
 }
@@ -756,25 +825,55 @@ async function sendChat(e) {
 // ---------------------------------------------------------------- get the app
 function buildQrCode() {
   const img = $('#qr-image');
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=${encodeURIComponent(CONFIG.siteUrl)}`;
+  const src = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=${encodeURIComponent(`${CONFIG.siteUrl}#get-app`)}`;
   if (img.getAttribute('src') !== src) img.src = src;
 }
 
-let installPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
-
-async function installApp() {
-  if (installPrompt) {
-    installPrompt.prompt();
-    try { await installPrompt.userChoice; } catch { /* dismissed */ }
-    installPrompt = null;
-  } else if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    toast('On iPhone or iPad: tap the Share button, then "Add to Home Screen".');
-  } else if (window.matchMedia('(display-mode: standalone)').matches) {
-    toast('The app is already installed on this device.');
-  } else {
-    toast('Open this page in Chrome, then choose "Install app" or "Add to Home screen" from the menu.');
+// Details of the latest Android app build (written by the build pipeline), or null if none yet.
+let apkInfoPromise = null;
+function apkInfo() {
+  if (!apkInfoPromise) {
+    apkInfoPromise = fetch('app/android.json', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => (info && info.versionName ? info : null))
+      .catch(() => null);
   }
+  return apkInfoPromise;
+}
+
+const fmtSize = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $('#pwa-install-btn').hidden = !$('#apk-ready').hidden;
+});
+
+async function setupAppSection() {
+  if (android) return;
+  if (isIOS) $('#app-ios').parentElement.prepend($('#app-ios'));
+  const info = await apkInfo();
+  if (!info) return;
+  $('#apk-ready').hidden = false;
+  $('#apk-missing').hidden = true;
+  $('#apk-meta').textContent = `Version ${info.versionName} · ${fmtSize(Number(info.size) || 0)}`;
+}
+
+async function installWebApp() {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  try { await installPrompt.userChoice; } catch { /* dismissed */ }
+  installPrompt = null;
+  $('#pwa-install-btn').hidden = true;
+}
+
+// Inside the app: offer the newer build when one has been published.
+async function checkAppUpdate() {
+  const st = appStatus();
+  if (!st || !st.code) return;
+  const info = await apkInfo();
+  if (info && Number(info.versionCode) > Number(st.code)) $('#app-update').hidden = false;
 }
 
 // ---------------------------------------------------------------- navigation
@@ -815,8 +914,10 @@ function wire() {
     $('#notify-free-btn').hidden = true;
     if (perm === 'granted') toast(`We'll let you know when ${ownerFirst()} is free (while this page is open).`);
   });
-  $('#get-app-btn').addEventListener('click', installApp);
+  $('#pwa-install-btn').addEventListener('click', installWebApp);
   $('#qr-print-btn').addEventListener('click', () => window.print());
+  // The app fires this when it comes back to the front (after a settings screen or printing).
+  window.addEventListener('alphiapp', () => { if (myRows.length) renderMyBookings(); });
 }
 
 function showStartupError(err) {
@@ -850,9 +951,12 @@ function startPolling() {
 }
 
 async function boot() {
+  if (android) document.documentElement.classList.add('in-app');
   renderStyleGallery();
   wire();
   loadDbStyles().then(() => { if (dbStyles.length) renderStyleGallery(); }).catch(() => {});
+  setupAppSection().catch(() => {});
+  checkAppUpdate().catch(() => {});
 
   for (let attempt = 0; !cfg; attempt++) {
     try {
