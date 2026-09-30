@@ -23,7 +23,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       signed: ${{ steps.verify.outputs.signed }}
@@ -79,7 +79,7 @@ jobs:
 
   emulator-test:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -114,12 +114,15 @@ jobs:
           gh release view android-ci >/dev/null 2>&1 || gh release create android-ci --prerelease \
             --title "Android app test results" \
             --notes "Screenshots and logs from the latest emulator test of the Android app. This is not a download of the app."
-          gh release upload android-ci ci-results/* --clobber
+          for f in ci-results/*; do
+            [ -s "$f" ] || continue   # GitHub refuses empty files
+            gh release upload android-ci "$f" --clobber || echo "::warning::could not upload $f"
+          done
 
   publish:
     needs: [build, emulator-test]
     if: needs.build.outputs.signed == 'true' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

@@ -16,6 +16,7 @@ import android.os.PowerManager;
 import android.print.PrintAttributes;
 import android.print.PrintManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -34,6 +35,7 @@ public class MainActivity extends Activity {
     static final String SITE_URL = "https://alphi-cuts.pages.dev/";
     static final String SITE_HOST = "alphi-cuts.pages.dev";
     static final String EXTRA_OPEN = "open";
+    private static final String TAG = "AlPhiCuts";
     private static final String OFFLINE_URL = "file:///android_asset/offline.html";
     private static final String TEST_PREFIX = "file:///android_asset/test/";
     private static final int REQ_FILE = 10;
@@ -76,6 +78,8 @@ public class MainActivity extends Activity {
         String start = SITE_URL + hashFor(getIntent());
         String test = getIntent().getStringExtra("testUrl");
         if (debuggable && test != null && test.startsWith(TEST_PREFIX)) start = test;
+        // Decide trust before loading: a fast page can call the bridge before onPageStarted arrives.
+        trusted = trustedUrl(start);
         web.loadUrl(start);
 
         askForNotificationsOnce();
@@ -114,8 +118,11 @@ public class MainActivity extends Activity {
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri u = request.getUrl();
             String path = u.getPath() == null ? "" : u.getPath();
-            if (isSite(u) && !path.endsWith(".apk")) return false;
-            if (debuggable && u.toString().startsWith(TEST_PREFIX)) return false;
+            boolean stay = (isSite(u) && !path.endsWith(".apk")) || (debuggable && u.toString().startsWith(TEST_PREFIX));
+            if (stay) {
+                if (request.isForMainFrame()) trusted = trustedUrl(u.toString());
+                return false;
+            }
             openExternal(u.toString()); // phone numbers, WhatsApp, maps, app updates
             return true;
         }
@@ -123,6 +130,11 @@ public class MainActivity extends Activity {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             trusted = trustedUrl(url);
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            if (trusted) Log.i(TAG, "Loaded " + url);
         }
 
         @Override
@@ -142,6 +154,7 @@ public class MainActivity extends Activity {
     }
 
     private void showOffline() {
+        Log.w(TAG, "Couldn't load the site; showing the offline page");
         trusted = false;
         web.loadUrl(OFFLINE_URL);
     }

@@ -51,6 +51,7 @@ adb wait-for-device
 adb shell settings put system screen_off_timeout 1800000
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
+adb logcat -c
 
 # ---------------------------------------------------------------- 1. release build opens the site
 RELEASE=$(ls "$APKS"/release/*.apk 2>/dev/null | head -1)
@@ -60,8 +61,8 @@ adb shell am start -W -n "$PKG/.MainActivity"
 sleep 25
 shot 01-release-home
 if adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$PKG/"; then pass "app opens and stays open"; else fail "app did not stay open"; fi
-ui_dump > "$OUT/release-ui.xml"
-if grep -qF "Book" "$OUT/release-ui.xml" && ! grep -qF "ran into an error" "$OUT/release-ui.xml"; then
+adb logcat -d -s AlPhiCuts:V > "$OUT/release-log.txt"
+if grep -qF "Loaded https://alphi-cuts.pages.dev/" "$OUT/release-log.txt" && ! grep -qF "offline page" "$OUT/release-log.txt"; then
   pass "live website shows inside the app"
 else
   fail "live website did not show inside the app"
