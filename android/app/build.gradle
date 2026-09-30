@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The release signing key lives outside the repository. CI provides it through the
+// ANDROID_SIGNING secret (see .github/workflows/android.yml); without it the release build is
+// signed with the throwaway debug key and is never published.
+def releaseKeystore = System.getenv('ALPHI_KEYSTORE')
+
+android {
+    namespace 'com.alphicuts.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.alphicuts.app'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (releaseKeystore) {
+                storeFile file(releaseKeystore)
+                storeType 'pkcs12'
+                storePassword System.getenv('ALPHI_KEYSTORE_PASSWORD')
+                keyAlias 'alphicuts'
+                keyPassword System.getenv('ALPHI_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig releaseKeystore ? signingConfigs.release : signingConfigs.debug
+        }
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}

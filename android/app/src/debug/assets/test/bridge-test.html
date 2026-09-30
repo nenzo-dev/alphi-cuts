@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bridge test</title>
+</head>
+<body style="background:#171512;color:#f3efe6;font-family:sans-serif;padding:20px">
+<h2>Bridge test (debug build only)</h2>
+<pre id="out" style="white-space:pre-wrap"></pre>
+<script>
+  // Hands the app a fake booking that starts 100 seconds from now, with a 1-minute heads-up,
+  // exactly as the website does. The API address is a non-existent project, so the watcher's
+  // checks fail quietly and never touch real data.
+  const start = Date.now() + 100 * 1000;
+  const token = 'b'.repeat(36);
+  const payload = {
+    api: { url: 'https://ci-test-invalid.supabase.co', key: 'test' },
+    device: 'a'.repeat(32), shop: 'Test Cuts', ownerFirst: 'Alfred', reminderMinutes: 1, slotMinutes: 30,
+    texts: {
+      reminder: 'Your cut at Test Cuts starts in {mins} minutes.',
+      now: "It's your turn at Test Cuts. Please go to the chair now.",
+      called: "You're next at Test Cuts. Please be at the shop now.",
+      onDeck: "You're 2 away at Test Cuts. Start heading over.",
+    },
+    tokens: [token],
+    bookings: [{ token, id: 'ci-test', status: 'booked', startMs: start, endMs: start + 30 * 60000, label: 'TEST' }],
+  };
+  let out = 'bridge: ' + typeof window.AlphiAndroid + '\n';
+  try {
+    out += 'info: ' + window.AlphiAndroid.info() + '\n';
+    window.AlphiAndroid.syncBookings(JSON.stringify(payload));
+    out += 'synced; slot starts ' + new Date(start).toISOString() + '\n';
+  } catch (e) {
+    out += 'ERROR ' + e + '\n';
+  }
+  document.getElementById('out').textContent = out;
+</script>
+</body>
+</html>
