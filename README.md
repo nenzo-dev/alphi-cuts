@@ -1,89 +1,79 @@
-# AlPhi Cuts — Alfred Phiri's Barbershop
+# AlPhi Cuts
 
-A booking website for a real, single-chair barbershop: opposite Silverest Primary School, Great East
-Road, Chongwe. Built the same way as MindCare — plain HTML/CSS/JavaScript modules with no build
-step, backed by a free [Supabase](https://supabase.com) project, deployable to Cloudflare Pages.
+Booking website for Alfred Phiri's barbershop, opposite Silverest Primary School on Great East Road,
+Chongwe. Live at <https://alphi-cuts.pages.dev>.
 
-## What it does
+Plain HTML, CSS and JavaScript modules (no build step), a [Supabase](https://supabase.com) database,
+hosted on Cloudflare Pages.
 
-- **Live queue, visible before you leave home.** The homepage shows today's slots as a coloured grid
-  (free / booked / in the chair) and a plain sentence — "3 slots ahead right now, next free slot
-  10:40am" — so nobody walks over only to find a long wait.
-- **Booking, 8am–8pm, 20 minutes a cut.** Pick a day (today → 6 days ahead), pick a free
-  slot, give a name and phone number. No account needed — the booking is tied to a private token
-  kept in that browser only.
-- **The queue actually advances itself.** When Alfred taps **Start cut** in the owner panel, that
-  client moves to "in chair" *and* the next booked client is marked **called** in the same instant —
-  their own page starts ringing ("you're up next, be ready"). If they don't check in, Alfred can mark
-  them a no-show and give the slot to someone else, exactly as asked.
-- **Reviews, chat, and shop details** — all editable by Alfred himself from the owner panel, no
-  code changes needed for a new phone number, price, or opening hours.
-- **Installable app**, with a QR code on the site: Android gets the install prompt straight away;
-  iPhone/iPad are pointed at Add to Home Screen (Apple does not allow a downloadable file there
-  without a paid Developer account and a Mac — the installed web app *is* the real iPhone app,
-  same as MindCare's).
+## Features
 
-## One-time setup
+- **Live queue.** Today's slots as a grid (free, booked, in the chair) and how many people are ahead.
+- **Online booking.** 30-minute slots from 9am by default. No account needed: each booking gets a
+  private token kept on the client's device.
+- **Alerts.** The client's page gives a heads-up a few minutes before their slot and rings when the
+  slot starts (or when the barber calls them early), with an on-screen alert and a notification.
+  "Add to calendar" gives a phone calendar reminder that works even when the browser is closed.
+- **Owner panel** (`admin.html`): run the queue, add walk-ins, reply to messages, approve online
+  payments, moderate reviews, and change hours, slot length, booking window, reminder time,
+  closed days, every piece of wording on the public page, which sections show, and the legal pages.
+- Reviews, chat, a style gallery with photo requests, manual mobile-money payments with receipts,
+  privacy policy, terms of use and disclaimer. Installable as an app.
 
-1. **Create a Supabase project** at [supabase.com](https://supabase.com) (free tier is enough for a
-   single shop).
-2. **Run the schema**: open the project's SQL editor, paste in the whole contents of
-   `supabase/schema.sql`, and run it once. This creates every table, security policy and function
-   the site needs — nothing else to configure.
-3. **Create Alfred's login**: Supabase dashboard → Authentication → Users → Add user
-   (his email + a password he'll remember). Then, in the SQL editor, run:
-   ```sql
-   insert into public.profiles (id, full_name)
-   values ('<the new user's UUID, shown in the Users list>', 'Alfred Phiri');
-   ```
-   That one row is what makes that login a real owner — everyone else who signs up (there is no
-   public sign-up form) stays a regular visitor.
-4. **Connect the site**: open `js/config.js` and paste in the Project URL and "anon public" key from
-   Project Settings → API. (Or skip this file entirely and paste them into the one-time setup
-   screen the site shows itself when it isn't connected yet — handy for testing before you commit
-   to a file change.)
-5. **Deploy to Cloudflare Pages**: push this folder to a GitHub repo, then in the Cloudflare
-   dashboard → Workers & Pages → Create → Pages → Connect to Git → pick the
-   repo. Build settings: Framework preset **None**, build command **blank**, build output directory
-   **/ (repo root)**. Every push then redeploys automatically.
-6. **Update the QR code's target**: `js/config.js`'s `siteUrl` should match wherever the site actually
-   ends up living (the `*.pages.dev` address, or a real domain once you have one) — the QR image
-   on the "Get the app" section is generated from that value.
+## Security
 
-## How "the queue calls the next person" really works
+- All access control is in the database: row-level security plus `SECURITY DEFINER` functions that
+  validate every input (`supabase/schema.sql`). The anon key in `js/config.js` is public by design.
+- Owner passwords are handled by Supabase Auth, which stores only a hash. The panel never stores the
+  password; the session token stays in the browser tab unless "Keep me signed in" is ticked.
+- Visitors only ever see messages written for them. Any unexpected error shows "Sorry, we ran into
+  an error. It's not you, it's us." (`js/lib/ui.js`).
+- Strict security headers and Content-Security-Policy in `_headers`. The one third-party script
+  (supabase-js, owner panel only) is pinned to a version and checked with Subresource Integrity.
 
-There is no GPS or Bluetooth involved — a plain browser can't reliably detect someone walking
-through a door, and pretending otherwise would be a system that quietly fails. Instead:
+## Setting up a new copy
 
-- A client can tap **"I'm here"** on their own booking once they've arrived (self-reported).
-- Only Alfred's own **Start cut** tap actually starts a cut — he's the one who knows the chair is
-  really free.
-- The moment he does, the system automatically marks the *next* booked client as **called** and rings
-  their phone (if their tab/app is open) — that's the "20 minutes later, the next person is
-  called" behaviour, driven by the real event (this cut starting) rather than a rigid timer that
-  can't tell a quick trim from a longer cut with dye.
-- If a called client never checks in, **No-show** in the owner panel frees their slot for a walk-in or
-  anyone else — exactly the "be there or lose it" rule that was asked for.
+1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.
+2. Put the project URL and anon key in `js/config.js`, and set `siteUrl` to where the site will live.
+3. Open `/admin.html` and use "Set up the owner account". The first account created becomes the owner.
+4. Deploy: in Cloudflare, Workers & Pages → Create → Pages → Connect to Git, pick this repository,
+   framework preset **None**, build command empty, output directory `/`. Every push to `master`
+   redeploys.
+
+An existing project is upgraded by running the new files in `supabase/migrations/` in order.
+
+## Running it locally
+
+```bash
+python tools/serve.py
+```
+
+Serves the site on <http://localhost:8130> with the same headers and 404 page as Cloudflare.
+
+## Versions
+
+Releases are tagged in git (`v2.0.0`, ...) and listed in [CHANGELOG.md](CHANGELOG.md). The version
+shown in the site footer comes from `js/config.js`; the service worker cache name in `sw.js` uses the
+same number, so bump both together.
 
 ## Project layout
 
 ```
-index.html            public site: queue, booking, my booking, reviews, chat, contact, get-app
-admin.html / js/admin.js   owner panel: queue control, all bookings, reviews, messages, shop details
-js/app.js              public site logic
-js/config.js            Supabase URL/key (safe to publish — real security is in the database)
-js/lib/db.js            thin Supabase client wrapper
-js/lib/slots.js          20-minute slot math
-js/lib/client.js         this browser's private booking token
-js/lib/ringtone.js       the "you're up next" alert (Web Audio, no audio file)
-css/style.css            the whole design (charcoal + gold)
-manifest.webmanifest, sw.js, icons/icon.svg   installable app / PWA
-supabase/schema.sql      the entire database: tables, row-level security, every function
+index.html, js/app.js        public site
+admin.html, js/admin.js      owner panel
+privacy.html, terms.html, disclaimer.html, developers.html, 404.html, js/page.js
+js/lib/                      shared modules: api (database calls), ui (errors, toasts), slots
+                             (time maths), content (editable wording), alarm/ringtone/notify
+                             (alerts), client (device tokens), ics, image, markdown
+js/legal-content.js          default legal wording
+css/style.css                all styles
+supabase/schema.sql          the whole database
+supabase/migrations/         upgrades for an existing database
+sw.js, manifest.webmanifest  installable app
+_headers                     security and cache headers for Cloudflare Pages
 ```
 
-## Known follow-ups
+## Developed by
 
-- `icons/icon.svg` is a plain placeholder monogram — swap in Alfred's real logo/photo once he has
-  one (a PNG works fine alongside or instead of the SVG in `manifest.webmanifest`).
-- Reviews are held for approval (`is_public = false` until Alfred publishes them from the owner
-  panel) so nothing goes live unmoderated.
+Tadiwananshe Nenzou (BIT24230509), Kombe Simon Nanyangwe (BIT24251003), Simata Sazambile
+(BIT24251377), Makanaka Joyleen Matsika (BIT24227997) and Tehillah Sakeni (BIT24127779).
