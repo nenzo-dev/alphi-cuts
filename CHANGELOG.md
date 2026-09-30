@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.0 (2026-09-30)
+
+Needs `supabase/migrations/11_style_request_cleanup.sql` run on the existing database.
+
+- Old style requests are deleted automatically after the owner's keep-days setting: ones without
+  a photo by the database every 10 minutes, ones with a photo by the owner panel when it opens
+  (the photo is removed first, through the storage service, so no file is left behind).
+- The privacy policy and the owner setting's label mention style requests.
+
 ## 2.2.0 (2026-09-30)
 
 Needs `supabase/migrations/10_early_cuts_and_cleanup.sql` run on the existing database.

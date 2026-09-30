@@ -251,6 +251,7 @@ async function showAdmin() {
   try { await loadSite(); } catch (err) { report(err); }
   // Clear cancelled and old records (also runs every 10 minutes on the database when it can).
   try { await rpc('admin_run_cleanup'); } catch { /* older database: nothing to run */ }
+  purgeOldStyleRequests().catch(() => {});
   wireShell();
   showTab(location.hash.slice(1));
   refreshBadges();
@@ -609,6 +610,23 @@ async function onFeedbackAction(e) {
 }
 
 // ---------------------------------------------------------------- style requests
+// Requests older than keep_days that have a photo: the database can't remove the photo itself
+// (files go through the Storage API), so the panel does it here, photo first, then the request.
+async function purgeOldStyleRequests() {
+  let due;
+  try { due = (await rpc('admin_expired_style_requests')) || []; } catch { return; } // older database
+  if (!due.length) return;
+  const paths = due.map((r) => r.storage_path).filter(Boolean);
+  try {
+    if (paths.length) await removeFiles('style-requests', paths);
+  } catch {
+    return; // keep the requests so the photos are tried again next time
+  }
+  for (const r of due) {
+    try { await rpc('admin_delete_style_request', { p_id: r.id }); } catch { /* tried again next time */ }
+  }
+}
+
 let requestRows = [];
 async function loadRequestsTab() {
   requestRows = (await rpc('admin_list_style_requests')) || [];
