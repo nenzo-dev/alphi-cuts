@@ -33,6 +33,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
+    def translate_path(self, path):
+        # Like Cloudflare Pages: /privacy serves privacy.html
+        local = super().translate_path(path)
+        if not os.path.splitext(local)[1] and os.path.isfile(local + '.html'):
+            return local + '.html'
+        return local
+
     def guess_type(self, path):
         return TYPES.get(os.path.splitext(path)[1].lower()) or super().guess_type(path)
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1 (2026-09-30)
+
+- Links go straight to the final page addresses (Cloudflare was redirecting every `.html` link,
+  costing an extra round trip).
+- The offline copy no longer stores a redirect for `index.html`.
+
 ## 2.0.0 (2026-09-30)
 
 Needs `supabase/migrations/09_v2_settings_and_hardening.sql` run on the existing database. Until

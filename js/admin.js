@@ -187,7 +187,7 @@ function showPending() {
 async function signOut() {
   try { await sb.auth.signOut(); } catch { /* local session is cleared either way */ }
   authStorage.removeItem(`sb-${new URL(CONFIG.supabase.url).hostname.split('.')[0]}-auth-token`);
-  location.replace('admin.html');
+  location.replace('admin');
 }
 
 function isAuthLoss(err) {
@@ -829,7 +829,7 @@ async function loadLegalTab() {
     <div class="card">
       <div class="field-head" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
         <h3 style="margin:0">${esc(doc.title)}</h3>
-        <span class="small"><a href="${key}.html" target="_blank" rel="noopener">View page</a> &middot;
+        <span class="small"><a href="${key}" target="_blank" rel="noopener">View page</a> &middot;
           <button type="button" class="link-btn" data-reset-legal="${key}">Reset to default</button></span>
       </div>
       <label class="sr-only" for="legal-${key}">${esc(doc.title)}</label>
