@@ -375,6 +375,21 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 td.actions { white-space: nowrap; }
+
+/* On a phone, each table row becomes a small card with labels, instead of a wide table to scroll. */
+@media (max-width: 640px) {
+  table.stack thead { display: none; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack tr { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel-2); }
+  table.stack td { border: none; padding: 5px 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: right; }
+  table.stack td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; text-align: left; }
+  table.stack td[data-label="Time"] { flex-wrap: wrap; }
+  table.stack td.actions { justify-content: flex-start; flex-wrap: wrap; gap: 6px; padding-top: 8px; white-space: normal; }
+  table.stack td.actions:empty, table.stack td[data-label]:empty { display: none; }
+  table.stack td[colspan] { display: block; text-align: left; }
+  td.actions .btn + .btn { margin-left: 0; }
+  .table-wrap { margin: 0; padding: 0; }
+}
 td.actions .btn + .btn { margin-left: 4px; }
 .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; min-width: 120px; flex: 1; }

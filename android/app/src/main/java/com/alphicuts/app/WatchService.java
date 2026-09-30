@@ -119,6 +119,25 @@ public class WatchService extends Service {
         if (tokens == null || tokens.length() == 0) return;
         JSONArray rows = Api.array(sync, "get_my_bookings", new JSONObject().put("p_tokens", tokens));
         boolean changed = false;
+
+        // A cancelled booking is deleted, so it simply stops coming back. (This only runs after a
+        // successful reply; a network error throws before getting here.)
+        java.util.Set<String> present = new java.util.HashSet<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row != null) present.add(row.optString("client_token"));
+        }
+        JSONArray known = sync.optJSONArray("bookings");
+        for (int i = 0; known != null && i < known.length(); i++) {
+            JSONObject b = known.optJSONObject(i);
+            if (b == null || !Store.isWaiting(b.optString("status"))) continue;
+            String token = b.optString("token");
+            if (present.contains(token)) continue;
+            Store.setStatus(this, token, "cancelled");
+            Notifier.cancelRing(this, token);
+            changed = true;
+        }
+
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row = rows.optJSONObject(i);
             if (row == null) continue;

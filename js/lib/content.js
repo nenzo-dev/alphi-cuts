@@ -155,6 +155,7 @@ export function contentVars(cfg) {
     days: String(cfg.booking_days_ahead),
     closed_note: closed.length ? ` Closed on ${pluralDays(closed)}.` : '',
     address: String(cfg.address_line || ''),
+    keep_days: String(cfg.keep_days || 90),
   };
 }
 

@@ -48,7 +48,12 @@ The information is stored with Supabase, our database provider, and the site is 
 
 ## How long we keep it
 
-We keep bookings, messages and style requests for as long as they're useful for running the shop. You can ask us to delete yours at any time.
+- A cancelled booking is deleted straight away. The only exception is a booking you had already paid for online, which we keep so the payment can be traced.
+- A missed booking is deleted the day after.
+- All other bookings and chat messages are deleted automatically after {keep_days} days.
+- Style requests are kept until the shop deletes them.
+
+You can ask us to delete your information sooner at any time.
 
 ## Your rights
 

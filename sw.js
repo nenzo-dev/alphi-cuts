@@ -1,7 +1,7 @@
 // Service worker: makes the site installable, lets it open on a flaky connection, and brings the
 // booking page forward when an alert notification is tapped.
 // Pages and code are network-first so updates show up straight away; images are cache-first.
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 const CACHE = `alphicuts-${VERSION}`;
 const CORE = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/logo-96.webp', 'icons/logo-512.webp',

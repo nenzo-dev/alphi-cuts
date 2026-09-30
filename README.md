@@ -19,6 +19,8 @@ hosted on Cloudflare Pages.
   closed days, every piece of wording on the public page, which sections show, and the legal pages.
 - Reviews, chat, a style gallery with photo requests, manual mobile-money payments with receipts,
   privacy policy, terms of use and disclaimer.
+- **Tidy records.** An early cut frees the booked slot. Cancelled bookings are deleted, missed ones
+  the next day, and everything else after a number of days the owner sets.
 - **Android app** (`android/`): shows the website and sets real phone alarms for each booking, so it
   rings at the slot time even when the app is closed. iPhones use Add to Home Screen instead, and
   must keep the site open for alerts.

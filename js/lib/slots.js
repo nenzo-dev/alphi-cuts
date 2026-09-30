@@ -88,7 +88,9 @@ export function shopTimeToEpoch(iso, hhmm) {
   return guess - (shownAsUtc - guess);
 }
 
-const ACTIVE = new Set(['booked', 'on_deck', 'called', 'checked_in', 'in_chair', 'done']);
+// Same rule as slot_is_taken() in the database: waiting bookings hold their slot, a cut in progress
+// holds the slot it's happening in (public_queue reports it there), finished cuts hold nothing.
+const ACTIVE = new Set(['booked', 'on_deck', 'called', 'checked_in', 'in_chair']);
 
 // For each slot, the status of any booking overlapping it. Bookings made before a change to the
 // slot length may sit between two slots; they block both.

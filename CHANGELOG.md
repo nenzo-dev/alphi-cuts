@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0 (2026-09-30)
+
+Needs `supabase/migrations/10_early_cuts_and_cleanup.sql` run on the existing database.
+
+### Changed
+- A client whose cut starts early no longer holds their booked slot: a started or finished cut
+  counts in the slot it actually happened in, so the booked slot opens up for someone else, and
+  the next people waiting are the ones called.
+- Cancelling a booking deletes it (kept only if online payment was approved or paid). Missed
+  bookings are deleted the day after, and all bookings and chat messages after a number of days
+  the owner sets (90 by default). This runs every 10 minutes and whenever the owner panel opens.
+- Owner panel tables show as readable cards on a phone, and show when a cut actually started.
+- Android app 1.1.0: stops the alarm for a booking that was cancelled elsewhere.
+- The privacy policy states exactly how long records are kept.
+
 ## 2.1.0 (2026-09-30)
 
 ### Added

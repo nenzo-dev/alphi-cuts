@@ -42,6 +42,7 @@ create table public.site_config (
   closed_weekdays int[] not null default '{}',          -- 0 = Sunday ... 6 = Saturday
   announcement text not null default '',
   content jsonb not null default '{}'::jsonb,            -- {"text": {...}, "hidden": [...], "legal": {...}}
+  keep_days int not null default 90,                     -- bookings and chat older than this are deleted
   updated_at timestamptz not null default now(),
   constraint site_config_settings_check check (
     slot_minutes between 5 and 180
@@ -50,7 +51,8 @@ create table public.site_config (
     and close_time > open_time
     and closed_weekdays <@ array[0, 1, 2, 3, 4, 5, 6]
     and jsonb_typeof(content) = 'object'
-  )
+  ),
+  constraint site_config_keep_days_check check (keep_days between 7 and 365)
 );
 insert into public.site_config (id) values (1) on conflict (id) do nothing;
 
@@ -196,22 +198,37 @@ create table public.bookings (
 );
 create unique index bookings_slot_taken
   on public.bookings (booking_date, slot_time)
-  where status not in ('cancelled', 'no_show');
+  where status in ('booked', 'on_deck', 'called', 'checked_in');
 create index bookings_device_token on public.bookings (device_token);
 
 alter table public.bookings enable row level security;
 create policy bookings_owner_all on public.bookings for all
   using (public.is_owner()) with check (public.is_owner());
 
--- True when an active booking on that day overlaps [p_slot, p_slot + p_minutes). Comparing start
--- times this way also catches older bookings made when the slots were a different length.
+-- Minutes since midnight of the slot a booking occupies: its booked slot while waiting, or the
+-- slot its cut actually started in once the barber has started it.
+create or replace function public.effective_minute(p_status text, p_slot time, p_started timestamptz, p_open int, p_len int)
+returns int language sql stable as $$
+  select case
+    when p_status in ('in_chair', 'done') and p_started is not null then
+      p_open + floor((public.minute_of((p_started at time zone 'Africa/Lusaka')::time) - p_open)::numeric / p_len)::int * p_len
+    else public.minute_of(p_slot)
+  end;
+$$;
+
+-- Waiting bookings hold their slot; a cut in progress holds the slot it's happening in; finished,
+-- cancelled and missed bookings hold nothing. Comparing start times also catches bookings made
+-- when the slots were a different length.
 create or replace function public.slot_is_taken(p_date date, p_slot time, p_minutes int)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
-    select 1 from public.bookings
-    where booking_date = p_date
-      and status not in ('cancelled', 'no_show')
-      and abs(public.minute_of(slot_time) - public.minute_of(p_slot)) < p_minutes
+    select 1
+    from public.bookings b, public.site_config c
+    where c.id = 1
+      and b.booking_date = p_date
+      and b.status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair')
+      and abs(public.effective_minute(b.status, b.slot_time, b.started_at, public.minute_of(c.open_time), c.slot_minutes)
+              - public.minute_of(p_slot)) < p_minutes
   );
 $$;
 
@@ -265,12 +282,17 @@ grant execute on function public.public_queue_today() to anon, authenticated;
 create or replace function public.public_queue(p_date date)
 returns table (slot_time time, status text)
 language sql stable security definer set search_path = public as $$
-  select b.slot_time, b.status
-  from public.bookings b
-  where b.booking_date = p_date
-    and p_date between public.shop_today() - 1 and public.shop_today() + 60
-    and b.status not in ('cancelled', 'no_show')
-  order by b.slot_time;
+  select make_time(e.m / 60, e.m % 60, 0), e.status
+  from (
+    select b.status,
+           public.effective_minute(b.status, b.slot_time, b.started_at, public.minute_of(c.open_time), c.slot_minutes) as m
+    from public.bookings b, public.site_config c
+    where c.id = 1
+      and b.booking_date = p_date
+      and p_date between public.shop_today() - 1 and public.shop_today() + 60
+      and b.status not in ('cancelled', 'no_show')
+  ) e
+  order by 1;
 $$;
 grant execute on function public.public_queue(date) to anon, authenticated;
 
@@ -372,6 +394,11 @@ grant execute on function public.get_my_bookings(text[]) to anon, authenticated;
 create or replace function public.cancel_my_booking(p_token text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
+  delete from public.bookings
+  where client_token = p_token
+    and status in ('booked', 'on_deck', 'called', 'checked_in')
+    and payment_status not in ('approved', 'paid');
+  if found then return; end if;
   update public.bookings set status = 'cancelled'
   where client_token = p_token and status in ('booked', 'on_deck', 'called', 'checked_in');
   if not found then
@@ -501,6 +528,7 @@ begin
   if nullif(p->>'slot_minutes', '') is not null then c.slot_minutes := (p->>'slot_minutes')::int; end if;
   if nullif(p->>'booking_days_ahead', '') is not null then c.booking_days_ahead := (p->>'booking_days_ahead')::int; end if;
   if nullif(p->>'reminder_minutes', '') is not null then c.reminder_minutes := (p->>'reminder_minutes')::int; end if;
+  if nullif(p->>'keep_days', '') is not null then c.keep_days := (p->>'keep_days')::int; end if;
   if jsonb_typeof(p->'closed_weekdays') = 'array' then
     c.closed_weekdays := array(select distinct x::int from jsonb_array_elements_text(p->'closed_weekdays') x order by 1);
   end if;
@@ -531,6 +559,7 @@ begin
   end if;
   if c.booking_days_ahead < 1 or c.booking_days_ahead > 60 then raise exception 'Booking window must be 1 to 60 days.'; end if;
   if c.reminder_minutes < 0 or c.reminder_minutes > 120 then raise exception 'The reminder must be 0 to 120 minutes before.'; end if;
+  if c.keep_days < 7 or c.keep_days > 365 then raise exception 'Records must be kept for 7 to 365 days.'; end if;
   if not (c.closed_weekdays <@ array[0, 1, 2, 3, 4, 5, 6]) or cardinality(c.closed_weekdays) >= 7 then
     raise exception 'The shop needs at least one open day.';
   end if;
@@ -544,7 +573,7 @@ begin
     rating = c.rating, rating_count = c.rating_count,
     open_time = c.open_time, close_time = c.close_time, slot_minutes = c.slot_minutes,
     booking_days_ahead = c.booking_days_ahead, reminder_minutes = c.reminder_minutes,
-    closed_weekdays = c.closed_weekdays, content = c.content,
+    keep_days = c.keep_days, closed_weekdays = c.closed_weekdays, content = c.content,
     updated_at = now()
   where id = 1;
 end;
@@ -564,12 +593,18 @@ grant execute on function public.admin_bookings_for_date(date) to authenticated;
 -- next two people (the next one is "called", the one after is "on deck").
 create or replace function public.admin_start_cut(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_date date; v_slot time; v_next_id uuid; v_next2_id uuid;
+declare
+  v_date date;
+  v_len int;
+  v_now int := public.minute_of(public.shop_now()::time);
+  v_next_id uuid;
+  v_next2_id uuid;
 begin
   if not public.is_owner() then raise exception 'Owner access required.'; end if;
+  select slot_minutes into v_len from public.site_config where id = 1;
   update public.bookings set status = 'in_chair', started_at = now()
   where id = p_booking_id and status in ('booked', 'on_deck', 'called', 'checked_in')
-  returning booking_date, slot_time into v_date, v_slot;
+  returning booking_date into v_date;
   if not found then
     raise exception 'That booking can''t be started. Refresh the list and try again.';
   end if;
@@ -578,12 +613,14 @@ begin
   where booking_date = v_date and status = 'in_chair' and id <> p_booking_id;
 
   select id into v_next_id from public.bookings
-    where booking_date = v_date and slot_time > v_slot and status in ('booked', 'on_deck', 'called')
+    where booking_date = v_date and id <> p_booking_id and status in ('booked', 'on_deck', 'called')
+      and public.minute_of(slot_time) + v_len > v_now
     order by slot_time limit 1;
   if v_next_id is not null then
     update public.bookings set status = 'called', called_at = now() where id = v_next_id;
     select id into v_next2_id from public.bookings
-      where booking_date = v_date and slot_time > v_slot and status in ('booked', 'on_deck', 'called') and id <> v_next_id
+      where booking_date = v_date and id not in (p_booking_id, v_next_id) and status in ('booked', 'on_deck', 'called')
+        and public.minute_of(slot_time) + v_len > v_now
       order by slot_time limit 1;
     if v_next2_id is not null then
       update public.bookings set status = 'on_deck', on_deck_at = now() where id = v_next2_id;
@@ -619,6 +656,11 @@ create or replace function public.admin_cancel_booking(p_booking_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_owner() then raise exception 'Owner access required.'; end if;
+  delete from public.bookings
+  where id = p_booking_id
+    and status in ('booked', 'on_deck', 'called', 'checked_in')
+    and payment_status not in ('approved', 'paid');
+  if found then return; end if;
   update public.bookings set status = 'cancelled'
   where id = p_booking_id and status in ('booked', 'on_deck', 'called', 'checked_in');
   if not found then raise exception 'That booking can''t be cancelled. Refresh the list and try again.'; end if;
@@ -1002,3 +1044,41 @@ language sql stable security definer set search_path = public as $$
   order by booking_date, slot_time;
 $$;
 grant execute on function public.admin_list_pending_payments() to authenticated;
+
+
+-- ============================================================ AUTOMATIC CLEANUP
+create or replace function public.cleanup_old_records()
+returns void language plpgsql security definer set search_path = public as $$
+declare v_keep int;
+begin
+  select keep_days into v_keep from public.site_config where id = 1;
+  v_keep := greatest(coalesce(v_keep, 90), 7);
+  delete from public.bookings
+    where status = 'cancelled' and payment_status not in ('approved', 'paid');
+  delete from public.bookings
+    where status = 'no_show' and booking_date < public.shop_today() and payment_status not in ('approved', 'paid');
+  delete from public.bookings where booking_date < public.shop_today() - v_keep;
+  delete from public.chat_messages where created_at < now() - make_interval(days => v_keep);
+end;
+$$;
+revoke execute on function public.cleanup_old_records() from public, anon, authenticated;
+
+create or replace function public.admin_run_cleanup()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Owner access required.'; end if;
+  perform public.cleanup_old_records();
+end;
+$$;
+grant execute on function public.admin_run_cleanup() to authenticated;
+
+-- Every 10 minutes, if pg_cron is available on this project.
+do $cron$
+begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'alphicuts-cleanup';
+  perform cron.schedule('alphicuts-cleanup', '*/10 * * * *', 'select public.cleanup_old_records()');
+exception when others then
+  raise notice 'pg_cron is not available (%); the owner panel runs the cleanup instead.', sqlerrm;
+end
+$cron$;

@@ -249,6 +249,8 @@ async function showAdmin() {
   $('#login-screen').hidden = true;
   $('#admin-shell').hidden = false;
   try { await loadSite(); } catch (err) { report(err); }
+  // Clear cancelled and old records (also runs every 10 minutes on the database when it can).
+  try { await rpc('admin_run_cleanup'); } catch { /* older database: nothing to run */ }
   wireShell();
   showTab(location.hash.slice(1));
   refreshBadges();
@@ -359,6 +361,13 @@ const STATUS_LABEL = {
 };
 const PAY_LABEL = { none: '', requested: 'Wants to pay online', approved: 'Approved, awaiting payment', paid: 'Paid' };
 const WAITING = ['booked', 'on_deck', 'called', 'checked_in'];
+const shopClock = new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+// Under the booked time: when the cut actually started (makes early cuts obvious).
+function startedNote(r) {
+  if (!r.started_at || !['in_chair', 'done'].includes(r.status)) return '';
+  return `<div class="small muted">started ${fmtTime(shopClock.format(new Date(r.started_at)))}</div>`;
+}
 
 const phoneLink = (p) => {
   const tel = String(p || '').replace(/[^\d+]/g, '');
@@ -386,11 +395,11 @@ async function loadQueueTab() {
   const visible = rows.filter((r) => r.status !== 'cancelled');
   $('#queue-table').innerHTML = visible.map((r) => `
     <tr>
-      <td><b>${fmtTime(r.slot_time)}</b></td>
-      <td>${esc(r.client_name)}</td>
-      <td>${phoneLink(r.client_phone)}</td>
-      <td class="small muted">${esc(r.style_choice || '')}</td>
-      <td><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
+      <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
+      <td data-label="Name">${esc(r.client_name)}</td>
+      <td data-label="Phone">${phoneLink(r.client_phone)}</td>
+      <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
+      <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
       <td class="actions">${bookingActions(r, { full: true })}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="muted">No bookings for today yet.</td></tr>';
 }
@@ -401,12 +410,12 @@ async function loadBookingsTab() {
   const isToday = day === todayISO();
   $('#bookings-table').innerHTML = rows.map((r) => `
     <tr>
-      <td><b>${fmtTime(r.slot_time)}</b></td>
-      <td>${esc(r.client_name)}</td>
-      <td>${phoneLink(r.client_phone)}</td>
-      <td class="small muted">${esc(r.style_choice || '')}</td>
-      <td><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
-      <td class="small muted">${esc(PAY_LABEL[r.payment_status] || '')}</td>
+      <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
+      <td data-label="Name">${esc(r.client_name)}</td>
+      <td data-label="Phone">${phoneLink(r.client_phone)}</td>
+      <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
+      <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
+      <td data-label="Payment" class="small muted">${esc(PAY_LABEL[r.payment_status] || '')}</td>
       <td class="actions">${bookingActions(r, { full: isToday })}</td>
     </tr>`).join('') || '<tr><td colspan="7" class="muted">No bookings that day.</td></tr>';
 }
@@ -421,7 +430,7 @@ const BOOKING_ACTIONS = {
   start: ['admin_start_cut', null],
   finish: ['admin_finish_cut', null],
   noshow: ['admin_mark_no_show', 'Mark this client as a no-show? Their slot becomes free again.'],
-  cancel: ['admin_cancel_booking', 'Cancel this booking? Their slot becomes free again.'],
+  cancel: ['admin_cancel_booking', 'Cancel this booking? It will be deleted and the slot becomes free again.'],
 };
 
 async function onBookingAction(e) {
@@ -518,10 +527,10 @@ async function loadPaymentsTab() {
   $('#pc-instructions').value = details || '';
   $('#payments-table').innerHTML = (rows || []).map((r) => `
     <tr>
-      <td>${esc(r.booking_date)}</td>
-      <td>${fmtTime(r.slot_time)}</td>
-      <td>${esc(r.client_name)}</td>
-      <td><span class="status-pill ${r.payment_status === 'requested' ? 'status-called' : 'status-checked_in'}">${esc(PAY_LABEL[r.payment_status] || r.payment_status)}</span></td>
+      <td data-label="Date">${esc(r.booking_date)}</td>
+      <td data-label="Time">${fmtTime(r.slot_time)}</td>
+      <td data-label="Name">${esc(r.client_name)}</td>
+      <td data-label="Status"><span class="status-pill ${r.payment_status === 'requested' ? 'status-called' : 'status-checked_in'}">${esc(PAY_LABEL[r.payment_status] || r.payment_status)}</span></td>
       <td class="actions">
         ${r.payment_status === 'requested' ? `<button class="btn btn-sm btn-gold" data-pay="approve" data-id="${esc(r.id)}">Approve</button>` : ''}
         ${r.payment_status === 'approved' ? `<button class="btn btn-sm btn-gold" data-pay="paid" data-id="${esc(r.id)}">Mark paid</button>` : ''}
@@ -641,6 +650,7 @@ async function onRequestAction(e) {
 
 // ---------------------------------------------------------------- hours & slots
 const SLOT_CHOICES = [10, 15, 20, 25, 30, 40, 45, 60, 75, 90, 120];
+const hasKeepDays = () => !!site && Object.prototype.hasOwnProperty.call(site, 'keep_days'); // database update 10
 
 async function loadHoursTab() {
   await loadSite();
@@ -652,6 +662,8 @@ async function loadHoursTab() {
   $('#hr-close').value = String(site.close_time).slice(0, 5);
   $('#hr-days').value = site.booking_days_ahead ?? 7;
   $('#hr-reminder').value = site.reminder_minutes ?? 10;
+  $('#hr-keep').value = site.keep_days ?? 90;
+  $('#hr-keep').disabled = !hasKeepDays();
   const closed = new Set(site.closed_weekdays || []);
   $('#hr-closed').innerHTML = [1, 2, 3, 4, 5, 6, 0].map((d) => `
     <label><input type="checkbox" value="${d}"${closed.has(d) ? ' checked' : ''}> ${dayName(d)}</label>`).join('');
@@ -692,6 +704,11 @@ async function saveHours(e) {
     if (closed.length >= 7) { showMsg(msg, 'The shop needs at least one open day.', 'error'); return; }
     if (daySlots(open, close, Number($('#hr-slot').value)).length === 0) { showMsg(msg, 'The opening hours are shorter than one slot.', 'error'); return; }
     Object.assign(payload, { slot_minutes: Number($('#hr-slot').value), booking_days_ahead: days, reminder_minutes: reminder, closed_weekdays: closed });
+  }
+  if (hasKeepDays()) {
+    const keep = Number($('#hr-keep').value);
+    if (!Number.isInteger(keep) || keep < 7 || keep > 365) { showMsg(msg, 'Keep records for a whole number of days from 7 to 365.', 'error'); return; }
+    payload.keep_days = keep;
   }
   await withBusy($('#hr-save'), async () => {
     try {
@@ -964,9 +981,9 @@ async function loadOwnersTab() {
   const rows = (await rpc('admin_list_owners')) || [];
   $('#owners-table').innerHTML = rows.map((r) => `
     <tr>
-      <td>${esc(r.full_name)}</td>
-      <td>${esc(r.email)}</td>
-      <td class="small muted">${esc(new Date(r.created_at).toLocaleDateString('en-GB', { timeZone: CONFIG.timeZone }))}</td>
+      <td data-label="Name">${esc(r.full_name)}</td>
+      <td data-label="Email">${esc(r.email)}</td>
+      <td data-label="Added" class="small muted">${esc(new Date(r.created_at).toLocaleDateString('en-GB', { timeZone: CONFIG.timeZone }))}</td>
       <td class="actions">${rows.length > 1 ? `<button class="btn btn-sm btn-ghost" data-remove-owner="${esc(r.id)}">Remove</button>` : ''}</td>
     </tr>`).join('') || '<tr><td colspan="4" class="muted">No owners yet.</td></tr>';
 }

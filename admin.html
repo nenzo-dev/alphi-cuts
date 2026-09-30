@@ -98,7 +98,7 @@
           <button class="btn btn-gold" type="submit" id="wi-add">Add walk-in</button>
         </form>
         <div class="table-wrap">
-          <table>
+          <table class="stack">
             <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th>Style</th><th>Status</th><th></th></tr></thead>
             <tbody id="queue-table"></tbody>
           </table>
@@ -117,7 +117,7 @@
       </div>
       <div class="card">
         <div class="table-wrap">
-          <table>
+          <table class="stack">
             <thead><tr><th>Time</th><th>Name</th><th>Phone</th><th>Style</th><th>Status</th><th>Payment</th><th></th></tr></thead>
             <tbody id="bookings-table"></tbody>
           </table>
@@ -154,7 +154,7 @@
       <div class="card">
         <h3>Waiting for you</h3>
         <div class="table-wrap">
-          <table>
+          <table class="stack">
             <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th><th></th></tr></thead>
             <tbody id="payments-table"></tbody>
           </table>
@@ -194,6 +194,9 @@
         <label for="hr-reminder">Heads-up before a client's slot (minutes)</label>
         <input id="hr-reminder" type="number" min="0" max="120" step="1">
         <p class="hint">Clients get a chime and notification this many minutes before their slot, and the page rings when the slot starts. Use 0 for no heads-up.</p>
+        <label for="hr-keep">Delete old bookings and chat messages after (days)</label>
+        <input id="hr-keep" type="number" min="7" max="365" step="1">
+        <p class="hint">Cancelled bookings are deleted straight away (unless they were paid online), and missed ones the day after.</p>
         <label>Closed on</label>
         <div class="check-row" id="hr-closed"></div>
         <div class="preview-box" id="hr-preview"></div>
@@ -291,7 +294,7 @@
         </form>
         <div id="ow-msg"></div>
         <div class="table-wrap">
-          <table>
+          <table class="stack">
             <thead><tr><th>Name</th><th>Email</th><th>Added</th><th></th></tr></thead>
             <tbody id="owners-table"></tbody>
           </table>
