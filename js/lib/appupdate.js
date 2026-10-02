@@ -5,7 +5,9 @@
 //
 // A pop-up says the version on the phone will no longer be supported; "Update now" closes it at once.
 // The bar at the top (#app-update) then shows how the update is going, or what's blocking it with an
-// "Open settings" button that goes straight to the setting that lifts the block.
+// "Open settings" button that goes straight to the setting that lifts the block. Once Update has been
+// pressed, neither the pop-up nor the Update bar comes back for that version for an hour, even if the
+// app is closed and opened again, so the person has time to finish installing it.
 import { $, esc, toast } from './ui.js';
 
 const BLOCKED_TEXT = {
@@ -21,6 +23,10 @@ let shownFor = 0;      // the version the pop-up was shown for since the app ope
 let fromSite = null;   // the newest version on the website, for apps that can't update themselves
 let retry = 0;
 let stall = 0;
+let pressedHere = null; // { code, at } when Update was pressed, in case the phone won't keep it (see pressed())
+
+const PRESSED_KEY = 'ac_update_pressed';
+const QUIET_MS = 60 * 60 * 1000;
 
 const status = () => {
   try { return JSON.parse(bridge.info()) || {}; } catch { return {}; }
@@ -34,6 +40,22 @@ function available() {
   if (st.update) return st.update;
   if (fromSite && Number(fromSite.versionCode) > Number(st.code || 0)) return fromSite;
   return null;
+}
+
+/** Was Update pressed for this version in the last hour? */
+function pressed(u) {
+  if (!u) return false;
+  let p = pressedHere;
+  try { p = JSON.parse(localStorage.getItem(PRESSED_KEY) || 'null') || p; } catch { /* use pressedHere */ }
+  return !!p && Number(p.code) === Number(u.versionCode) && Date.now() - Number(p.at) < QUIET_MS;
+}
+
+function setPressed(u) {
+  pressedHere = u ? { code: Number(u.versionCode), at: Date.now() } : null;
+  try {
+    if (pressedHere) localStorage.setItem(PRESSED_KEY, JSON.stringify(pressedHere));
+    else localStorage.removeItem(PRESSED_KEY);
+  } catch { /* pressedHere still covers this visit */ }
 }
 
 /** Inside the app, once: watch for a newer version and keep the pop-up and the bar up to date. */
@@ -63,13 +85,14 @@ function onProgress(stage, pct = 0) {
   clearTimeout(stall);
   if (stage === 'error') {
     progress = null;
+    setPressed(null); // Update comes back so they can try again
     toast("Sorry, the update didn't download. Check your connection and try again.", 'error');
   } else if (['idle', 'none', 'blocked'].includes(stage)) {
     progress = null;
   } else {
     progress = { stage, pct };
     // If nothing more is heard for a while, show Update again rather than a stuck message.
-    if (stage !== 'confirm') stall = setTimeout(() => { progress = null; paintBar(); }, 90000);
+    if (stage !== 'confirm') stall = setTimeout(() => { progress = null; setPressed(null); paintBar(); }, 90000);
   }
   paintBar();
 }
@@ -84,10 +107,13 @@ function progressText(p) {
 
 function startUpdate() {
   closePopup();
-  if (!available()) return;
+  const u = available();
+  if (!u) return;
+  setPressed(u);
+  paintBar();
   if (canSelfUpdate()) {
     onProgress('starting');
-    try { bridge.startUpdate(); } catch { progress = null; paintBar(); }
+    try { bridge.startUpdate(); } catch { progress = null; setPressed(null); paintBar(); }
   } else {
     // An older app: the phone's browser downloads the new version, which then installs over this one.
     location.href = 'app/alphi-cuts.apk';
@@ -112,7 +138,7 @@ function paintBar() {
     html = `${esc(BLOCKED_TEXT[blocked] || 'Something on your phone is blocking the update.')}
       <button type="button" class="au-btn" data-au="settings">Open settings</button>
       ${retryable ? '<button type="button" class="au-btn au-btn-plain" data-au="update">Try again</button>' : ''}`;
-  } else if (u) {
+  } else if (u && !pressed(u)) {
     html = `Version ${esc(u.versionName)} of the app is ready. This version will no longer be supported.
       <button type="button" class="au-btn" data-au="update">Update</button>`;
   }
@@ -126,7 +152,7 @@ function paintBar() {
 
 function maybeShowPopup() {
   const u = available();
-  if (!u || progress || shownFor === Number(u.versionCode)) return;
+  if (!u || progress || pressed(u) || shownFor === Number(u.versionCode)) return;
   const root = $('#modal-root');
   if (!root) return;
   // Never on top of another pop-up: try again a little later.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.1 (2026-10-02)
+
+- The update notice in the Android app goes away once Update is pressed. On app 1.0.0 and 1.1.0 the
+  gold bar stayed after the download started, and the pop-up came back when the app was opened
+  again. Now neither comes back for that version for an hour, which leaves time to install it. If the
+  download fails, Update shows again straight away.
+
 ## 2.5.0 (2026-10-02)
 
 Needs `supabase/migrations/12_arrival_checkin.sql` run on the existing database, then the shop's
