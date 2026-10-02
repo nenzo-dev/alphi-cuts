@@ -23,6 +23,8 @@ final class Scheduler {
     static final String ACTION_WATCH = "com.alphicuts.app.WATCH";
     static final String ACTION_SILENCE = "com.alphicuts.app.SILENCE";
     static final long WATCH_LEAD_MS = 2 * 60 * 60 * 1000L;
+    /** A checked-in client may wait past their slot if the barber is running late: keep watching. */
+    static final long LATE_MS = 2 * 60 * 60 * 1000L;
     private static final long RING_MS = 5 * 60 * 1000L;
     private static final String SCHEDULED = "scheduled";
 
@@ -56,7 +58,13 @@ final class Scheduler {
 
         for (int i = 0; bookings != null && i < bookings.length(); i++) {
             JSONObject b = bookings.optJSONObject(i);
-            if (b == null || !Store.isWaiting(b.optString("status"))) continue;
+            if (b == null) continue;
+            if ("checked_in".equals(b.optString("status"))) {
+                // At the shop: no alarms, but keep watching so they hear when they're next.
+                if (now >= b.optLong("startMs") - WATCH_LEAD_MS && now < b.optLong("endMs") + LATE_MS) watchNow = true;
+                continue;
+            }
+            if (!Store.isWaiting(b.optString("status"))) continue;
             String token = b.optString("token");
             long start = b.optLong("startMs");
             long end = b.optLong("endMs");

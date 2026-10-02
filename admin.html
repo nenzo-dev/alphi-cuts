@@ -67,6 +67,7 @@
     <div class="side-group">Website</div>
     <a href="#hours" data-tab="hours">Hours &amp; slots</a>
     <a href="#shop" data-tab="shop">Shop details</a>
+    <a href="#arrivals" data-tab="arrivals">Arrivals</a>
     <a href="#page" data-tab="page">Public page</a>
     <a href="#legal" data-tab="legal">Legal pages</a>
     <a href="#styles" data-tab="styles">Haircut styles</a>
@@ -230,6 +231,32 @@
         </div>
         <button class="btn btn-gold" type="submit" id="sc-save" style="margin-top:16px">Save shop details</button>
         <div id="sc-msg"></div>
+      </form>
+    </section>
+
+    <section data-panel="arrivals" hidden>
+      <h2>Arrivals</h2>
+      <form class="card" id="arrival-form" novalidate>
+        <p class="hint" style="margin-top:0">Clients who turn on "Check me in when I arrive" are checked in when their phone reaches the shop, on the day of their booking. Set the shop's location once, standing in the shop.</p>
+        <div class="field-row">
+          <div><label for="ar-lat">Latitude</label><input id="ar-lat" type="number" step="any" min="-90" max="90" inputmode="decimal" placeholder="-15.33"></div>
+          <div><label for="ar-lng">Longitude</label><input id="ar-lng" type="number" step="any" min="-180" max="180" inputmode="decimal" placeholder="28.68"></div>
+        </div>
+        <div class="arrival-tools">
+          <button type="button" class="btn btn-ghost btn-sm" id="ar-here">Use my current location</button>
+          <a class="btn btn-ghost btn-sm" id="ar-map" target="_blank" rel="noopener noreferrer" hidden>Check it on the map</a>
+        </div>
+        <div id="ar-here-msg"></div>
+        <label for="ar-radius">Counts as arrived within (metres)</label>
+        <input id="ar-radius" type="number" min="30" max="1000" step="10">
+        <p class="hint">150 m suits most shops. Inside some buildings a phone only knows where it is to within 50 m or so.</p>
+        <div class="check-row arrival-checks">
+          <label><input type="checkbox" id="ar-auto-checkin"> Check clients in automatically when they arrive</label>
+          <label><input type="checkbox" id="ar-auto-start"> Put a checked-in client in the chair when their slot starts</label>
+        </div>
+        <p class="hint">A client only goes in the chair automatically when the chair is free. If a cut has been left running for more than two slots, it's marked done first.</p>
+        <button class="btn btn-gold" type="submit" id="ar-save" style="margin-top:14px">Save arrivals</button>
+        <div id="ar-msg"></div>
       </form>
     </section>
 

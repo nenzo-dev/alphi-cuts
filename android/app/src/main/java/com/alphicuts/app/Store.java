@@ -29,6 +29,11 @@ final class Store {
         return "booked".equals(status) || "on_deck".equals(status) || "called".equals(status);
     }
 
+    /** Waiting, or checked in at the shop and waiting for the chair: the watcher keeps an eye on these. */
+    static boolean isWatched(String status) {
+        return isWaiting(status) || "checked_in".equals(status);
+    }
+
     static synchronized void saveSync(Context c, JSONObject sync) {
         // Forget "already fired" markers for bookings that are no longer on this phone.
         Set<String> keep = new HashSet<>();

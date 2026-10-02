@@ -56,6 +56,19 @@ final class Bridge {
         if (activity.isTrustedPage()) activity.runOnUiThread(activity::printPage);
     }
 
+    /** "Check me in when I arrive" on today's booking: asks for location, then watches for arrival. */
+    @JavascriptInterface
+    public void enableArrival() {
+        if (activity.isTrustedPage()) activity.runOnUiThread(activity::startArrivalFlow);
+    }
+
+    @JavascriptInterface
+    public void disableArrival() {
+        if (!activity.isTrustedPage()) return;
+        Arrival.setEnabled(activity, false);
+        activity.tellPage();
+    }
+
     /** "Update" on the website: download, check and install the newer version. */
     @JavascriptInterface
     public void startUpdate() {

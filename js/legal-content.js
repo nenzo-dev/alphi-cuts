@@ -19,9 +19,19 @@ This page explains what {shop} collects through this website, why we collect it,
 - **Style requests:** the description you write and any photo you upload.
 - **Reviews:** the name you give (optional), your rating and your comment.
 - **Online payments:** whether you asked to pay online and whether the payment was approved and received. We never ask for card numbers or mobile money PINs. You pay us directly.
+- **Arriving at the shop:** only if you turn on "Check me in when I arrive" (see below).
 - **On your device:** the site keeps a few random codes in your browser so it can show your own booking and chat. They don't contain your name or number. Clearing your browser data removes them, but you'll no longer see your booking on that device.
 
 We don't use advertising or tracking cookies, and we never sell your information.
+
+## Checking in when you arrive
+
+This is off until you turn on "Check me in when I arrive" on your booking. Then, on the day of your booking, from two hours before your slot until it ends, your phone compares its location with the shop's. When you're close enough, it sends your position once so you can be checked in, and the shop sees that you've arrived.
+
+- We don't keep your position. We only record that you were checked in on arrival.
+- Your location isn't used on any other day, or outside those hours.
+- In the Android app this works even when the app is closed, if you allow location "all the time". On a website or iPhone it only works while the page is open.
+- You can turn it off on your booking at any time, or turn off location for the app or the site in your phone's settings.
 
 ## The Android app
 
@@ -30,9 +40,10 @@ The app shows this same website, so everything on this page applies to it. On to
 - It keeps your booking time and the private code for each booking on your phone, so it can set alarms for them.
 - On the day of a booking, from about two hours before your slot until it ends, it checks your booking and any replies from the shop every so often, even when the app is closed. While it does this, Android shows a "Keeping an eye on your booking" notification.
 - It asks to show notifications, set alarms, show a full-screen alert when it's your turn, and run in the background. You can turn any of these off in your phone's settings, but alerts may then not work.
+- If you turn on "Check me in when I arrive", it asks for your location, as described above.
 - Every few hours it checks this website for a newer version of the app and tells you when one is ready. Nothing about you is sent. An update only installs when you tap Update and confirm on Android's own screen, and only if it's the exact file published here, signed by the shop. To install updates, the app asks you to allow it to install apps; if your phone blocks that, the app shows you the setting that controls it.
 
-The app has no ads or trackers, and it doesn't use your contacts, location, camera or microphone. It only reads a photo if you choose one to send with a style request. Uninstalling the app deletes everything it stored on your phone.
+The app has no ads or trackers, and it doesn't use your contacts, camera or microphone. It only uses your location for checking you in when you arrive, if you turn that on. It only reads a photo if you choose one to send with a style request. Uninstalling the app deletes everything it stored on your phone.
 
 ## Why we use it
 
@@ -77,6 +88,7 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 
 - A booking holds one {slot}-minute slot for one person.
 - Please arrive a few minutes early. If you're not at the shop when it's your turn, your slot may go to the next person and be marked as a no-show.
+- Once you're checked in, please stay at the shop. When your slot starts and the chair is free, you may be marked as in the chair automatically.
 - Times are a guide. A cut can run a little early or late, especially if the person before you needs more time.
 - If you can't make it, cancel from "My booking" so someone else can have the slot.
 - We may cancel or move a booking if something comes up at the shop. We'll try to reach you on the number you gave.
@@ -132,6 +144,8 @@ Hair dye and some hair products can cause allergic reactions. If you have sensit
 ## Queue, times and alerts
 
 The queue and times on this site depend on the shop keeping them up to date, so treat them as a guide.
+
+Checking in when you arrive depends on your phone's location, which can be off by tens of metres, especially indoors or with a weak signal. If you aren't checked in when you get to the shop, tap "I'm here".
 
 The Android app rings when your slot starts even when the app is closed, as long as you allow its notifications, alarms and background use. Some phones' battery savers can still stop it, and the sound follows your phone's alarm volume. On iPhone and in a web browser, alerts only work while this site is open; adding your booking to your calendar is the most reliable reminder there. Please keep an eye on the time yourself.
 

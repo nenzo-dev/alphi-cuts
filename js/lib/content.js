@@ -88,6 +88,8 @@ export const TEXT_GROUPS = [
       alert_on_deck: ['Two people away', "You're 2 away at {shop}. Start heading over."],
       alert_called: ['Called next', "You're next at {shop}. Please be at the shop now."],
       alert_now: ['Slot has started', "It's your turn at {shop}. Please go to the chair now."],
+      alert_arrived: ['Checked in on arrival', "You're checked in at {shop}. {owner_first} can see you're here."],
+      alert_next_here: ['Next, already at the shop', "You're next at {shop}. Please don't leave. {owner_first} will call you to the chair shortly."],
     },
   },
   {

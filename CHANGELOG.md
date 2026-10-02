@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.5.0 (2026-10-02)
+
+Needs `supabase/migrations/12_arrival_checkin.sql` run on the existing database, then the shop's
+location set once in the owner panel (Arrivals).
+
+- Checking in on arrival. A client who turns on "Check me in when I arrive" is checked in when their
+  phone reaches the shop, on the day of the booking from two hours before the slot until it ends. The
+  owner panel shows them as checked in, tagged "arrived". In the Android app (1.3.0) this works with
+  the app closed if location is allowed all the time; in a browser it works while the page is open.
+  The position is checked again by the database and never stored.
+- "You're next": a checked-in client is told when they're next, and asked not to leave the shop.
+- Into the chair automatically: every minute the database puts the next checked-in client whose slot
+  has started in the chair, when the chair is free (or the cut in it has been left running for more
+  than two slots). The owner can turn either automatic step off.
+- Owner panel: new Arrivals page to set the shop's location ("Use my current location"), how close
+  counts as arrived, and the two automatic steps.
+- "Open in Maps" goes to the shop's exact location once it's set.
+- The site now allows location for its own pages (Permissions-Policy), which it blocked before.
+- Privacy policy, terms and disclaimer explain checking in on arrival.
+
 ## 2.4.0 (2026-10-02)
 
 - Android app 1.2.0 updates itself. It looks for a newer version when it opens and every few hours

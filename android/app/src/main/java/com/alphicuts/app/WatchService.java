@@ -68,15 +68,19 @@ public class WatchService extends Service {
         return START_STICKY;
     }
 
-    /** The waiting booking this service is here for, or null when there's nothing left to watch. */
+    /**
+     * The booking this service is here for, or null when there's nothing left to watch: one still
+     * waiting, or one checked in at the shop (watched a while past its slot, in case the barber is late).
+     */
     private JSONObject nextActive(JSONObject sync, long now) {
         JSONArray list = sync == null ? null : sync.optJSONArray("bookings");
         JSONObject best = null;
         for (int i = 0; list != null && i < list.length(); i++) {
             JSONObject b = list.optJSONObject(i);
-            if (b == null || !Store.isWaiting(b.optString("status"))) continue;
+            if (b == null || !Store.isWatched(b.optString("status"))) continue;
             long start = b.optLong("startMs");
-            if (b.optLong("endMs") <= now || start - Scheduler.WATCH_LEAD_MS > now) continue;
+            long until = b.optLong("endMs") + ("checked_in".equals(b.optString("status")) ? Scheduler.LATE_MS : 0);
+            if (until <= now || start - Scheduler.WATCH_LEAD_MS > now) continue;
             if (best == null || start < best.optLong("startMs")) best = b;
         }
         return best;
@@ -84,6 +88,7 @@ public class WatchService extends Service {
 
     private String describe() {
         JSONObject b = nextActive(Store.sync(this), System.currentTimeMillis());
+        if (b != null && "checked_in".equals(b.optString("status"))) return "You're checked in. We'll tell you when you're next.";
         String label = b == null ? "" : b.optString("label");
         return label.isEmpty() ? "We'll let you know when it's your turn." : "Your " + label + " slot. We'll alert you when it's your turn.";
     }
@@ -108,6 +113,14 @@ public class WatchService extends Service {
             } catch (Exception ignored) {
                 // same as above
             }
+        }
+        // "Check me in when I arrive", then "you're next" once checked in (Arrival.java).
+        JSONObject latest = Store.booking(this, active.optString("token"));
+        Arrival.maybeCheckIn(this, Store.sync(this), latest);
+        try {
+            Arrival.maybeTellNext(this, Store.sync(this), Store.booking(this, active.optString("token")));
+        } catch (Exception ignored) {
+            // offline or the server is busy: try again next time
         }
         getSystemService(NotificationManager.class).notify(Notifier.WATCH_ID, Notifier.watching(this, describe()));
         long untilStart = active.optLong("startMs") - now;

@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
     private static final String TEST_PREFIX = "file:///android_asset/test/";
     private static final int REQ_FILE = 10;
     private static final int REQ_NOTIFICATIONS = 11;
+    private static final int REQ_LOCATION = 13;
+    private static final int REQ_BACKGROUND_LOCATION = 14;
 
     private static volatile boolean visible;
     private static volatile MainActivity current;
@@ -275,6 +277,9 @@ public class MainActivity extends Activity {
                         .put("versionCode", u.optInt("versionCode")).put("size", u.optLong("size")));
             }
             o.put("installBlocked", installBlocked());
+            // "Check me in when I arrive": turned on, and what Android allows (Arrival.java).
+            o.put("arrival", new JSONObject().put("on", Arrival.enabled(this))
+                    .put("location", Arrival.hasLocation(this)).put("background", Arrival.hasBackground(this)));
         } catch (Exception ignored) {
             // leave whatever was filled in
         }
@@ -344,9 +349,55 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    // ---------------------------------------------------------------- checking in on arrival
+    /** "Check me in when I arrive": location first, then (Android 10 and later) location all the time. */
+    void startArrivalFlow() {
+        Arrival.setEnabled(this, true);
+        if (!Arrival.hasLocation(this)) {
+            if (Store.getInt(this, "askedLocation", 0) >= 2 && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                // Android stops asking after two refusals: the switch is in the app's settings now.
+                explain("Allow location", "So the app can check you in when you arrive, allow location for AlPhi Cuts in the next screen (Permissions, then Location).",
+                        new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                return;
+            }
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+            return;
+        }
+        if (!Arrival.hasBackground(this)) {
+            askForBackgroundLocation();
+            return;
+        }
+        Toast.makeText(this, "You'll be checked in when you arrive.", Toast.LENGTH_SHORT).show();
+        Scheduler.scheduleAll(this); // starts the watcher if a booking is in its arrival window
+        tellPage();
+    }
+
+    private void askForBackgroundLocation() {
+        new AlertDialog.Builder(this)
+                .setTitle("Allow location all the time")
+                .setMessage("So the app can check you in when you arrive, even when it's closed, choose \"Allow all the time\" "
+                        + "in the next screen. It's only used on the day of your booking, from two hours before your slot.")
+                .setPositiveButton("Continue", (d, w) -> requestPermissions(
+                        new String[]{Manifest.permission.ACCESS_BACKGROUND_LOCATION}, REQ_BACKGROUND_LOCATION))
+                .setNegativeButton("Not now", (d, w) -> tellPage())
+                .show();
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == REQ_LOCATION) {
+            Store.putInt(this, "askedLocation", Store.getInt(this, "askedLocation", 0) + 1);
+            if (Arrival.hasLocation(this) && !Arrival.hasBackground(this)) askForBackgroundLocation();
+            Scheduler.scheduleAll(this);
+            tellPage();
+            return;
+        }
+        if (requestCode == REQ_BACKGROUND_LOCATION) {
+            Scheduler.scheduleAll(this);
+            tellPage();
+            return;
+        }
         if (requestCode != REQ_NOTIFICATIONS) return;
         Store.putInt(this, "askedNotifications", Store.getInt(this, "askedNotifications", 0) + 1);
         tellPage();

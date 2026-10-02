@@ -2,6 +2,7 @@ import { CONFIG, VERSION } from './config.js';
 import { rpc, rpcOr, select, uploadFile, publicFileUrl } from './lib/api.js';
 import {
   $, $$, esc, showMsg, showError, toast, toastError, withBusy, friendlyError, installGlobalErrorHandlers, GENERIC_ERROR,
+  storageGet, storageSet,
 } from './lib/ui.js';
 import {
   daySlots, fmtTime, fmtDate, todayISO, nowMinutesInShopTz, shopDateOptions, toMin, slotStatuses, weekdayOf,
@@ -15,6 +16,9 @@ import { configureAlarms, updateAlarms, startsIn } from './lib/alarm.js';
 import { bookingIcs, downloadFile } from './lib/ics.js';
 import { prepareImage } from './lib/image.js';
 import { watchAppUpdate } from './lib/appupdate.js';
+import {
+  arrivalAvailable, arrivalOn, arrivalDenied, turnArrivalOn, turnArrivalOff, updateArrivalWatch,
+} from './lib/arrival.js';
 import { HAIRCUT_STYLES, styleThumb, stylePhotos } from './styles-data.js';
 
 installGlobalErrorHandlers();
@@ -115,8 +119,10 @@ function renderContact() {
   if (wa) links.push(`<a class="btn btn-ghost" href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer">WhatsApp</a>`);
   if (/^https:\/\//i.test(c.facebook || '')) links.push(`<a class="btn btn-ghost" href="${esc(c.facebook)}" target="_blank" rel="noopener noreferrer">Facebook</a>`);
   if (/^https:\/\//i.test(c.instagram || '')) links.push(`<a class="btn btn-ghost" href="${esc(c.instagram)}" target="_blank" rel="noopener noreferrer">Instagram</a>`);
-  if (c.address_line) {
-    links.push(`<a class="btn btn-ghost" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(c.address_line)}" target="_blank" rel="noopener noreferrer">Open in Maps</a>`);
+  // The map opens at the exact spot once the owner has set the shop's location, else at the address.
+  const mapQuery = c.shop_lat != null && c.shop_lng != null ? `${Number(c.shop_lat)},${Number(c.shop_lng)}` : c.address_line;
+  if (mapQuery) {
+    links.push(`<a class="btn btn-ghost" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(mapQuery)}" target="_blank" rel="noopener noreferrer">Open in Maps</a>`);
   }
   $('#ct-contacts').innerHTML = links.join('') || '<p class="muted">Contact details coming soon.</p>';
 }
@@ -143,6 +149,7 @@ const invalidateDays = () => dayCache.clear();
 // ---------------------------------------------------------------- today's queue
 let wasBusy = null;
 let lastToday = todayISO();
+let todayQueue = null; // { at, rows } from the last successful load of today's queue
 
 function renderFreeBanner(freeNow) {
   const slot = $('#free-banner-slot');
@@ -165,6 +172,7 @@ async function loadQueue() {
   const grid = $('#slot-grid');
 
   if (cfg.closed_weekdays.includes(weekdayOf(today))) {
+    todayQueue = null;
     summary.innerHTML = `<span class="muted">${esc(t('queue_closed'))}</span>`;
     grid.innerHTML = '';
     renderFreeBanner(false);
@@ -179,6 +187,7 @@ async function loadQueue() {
     if (!grid.children.length) summary.innerHTML = `<span class="muted">${esc(friendlyError(e))}</span>`;
     return;
   }
+  todayQueue = { at: Date.now(), rows };
 
   const len = cfg.slot_minutes;
   const slots = daySlots(cfg.open_time, cfg.close_time, len);
@@ -221,6 +230,7 @@ async function loadQueue() {
   }
   wasBusy = !freeNow;
   updateNotifyButton(freeNow);
+  checkNextUp();
 }
 
 // ---------------------------------------------------------------- style gallery
@@ -466,6 +476,8 @@ async function refreshMyBookings() {
     myRows = sortBookings(keep);
     renderMyBookings();
     setAlarms(keep);
+    if (!android) updateArrivalWatch({ cfg, rows: keep, onCheckedIn: onArrived });
+    checkNextUp();
   } finally {
     const active = myRows.some((r) => WAITING.includes(r.status) || r.status === 'in_chair');
     if (bookingTokens().length) myPollTimer = setTimeout(() => refreshMyBookings().catch(() => {}), active ? 15000 : 60000);
@@ -490,11 +502,17 @@ function setAlarms(rows) {
       now: t('alert_now'),
       called: t('alert_called'),
       onDeck: t('alert_on_deck'),
+      arrived: t('alert_arrived'),
+      nextHere: t('alert_next_here'),
     },
+    // The shop's location, when the owner has set it, for checking in on arrival (Arrival.java).
+    arrival: arrivalAvailable(cfg)
+      ? { lat: Number(cfg.shop_lat), lng: Number(cfg.shop_lng), radius: Number(cfg.arrival_radius_m) || 150 }
+      : null,
     tokens: bookingTokens(),
-    bookings: rows.filter((r) => ['booked', 'on_deck', 'called'].includes(r.status)).map((r) => {
+    bookings: rows.filter((r) => WAITING.includes(r.status)).map((r) => {
       const start = shopTimeToEpoch(r.booking_date, r.slot_time);
-      return { token: r.client_token, id: r.id, status: r.status, startMs: start, endMs: start + cfg.slot_minutes * 60000, label: fmtTime(r.slot_time) };
+      return { token: r.client_token, id: r.id, status: r.status, startMs: start, endMs: start + cfg.slot_minutes * 60000, label: fmtTime(r.slot_time), slot: r.slot_time };
     }),
   };
   try { android.syncBookings(JSON.stringify(payload)); } catch { /* an older app without this call */ }
@@ -503,7 +521,8 @@ function setAlarms(rows) {
 function countdown(b) {
   if (!WAITING.includes(b.status)) return '';
   const ms = startsIn(b);
-  if (ms <= 0) return b.status === 'checked_in' ? "You're checked in. You'll be called soon." : 'Your slot has started. Please go to the chair.';
+  if (b.status === 'checked_in') return isNextUp(b) ? t('alert_next_here') : "You're checked in. We'll tell you when you're next.";
+  if (ms <= 0) return 'Your slot has started. Please go to the chair.';
   const mins = Math.round(ms / 60000);
   if (mins < 60) return `Starts in ${mins} min`;
   if (mins < 24 * 60) return `Starts in ${Math.floor(mins / 60)} h ${mins % 60} min`;
@@ -549,6 +568,7 @@ function ticketHtml(b) {
   }
   if (active) actions.push(`<button type="button" class="btn btn-ghost btn-sm" data-act="cancel" data-token="${token}">Cancel</button>`);
   const note = countdown(b);
+  const arrival = isToday && ['booked', 'on_deck', 'called'].includes(b.status) ? arrivalHtml() : '';
   return `
     <div class="ticket${active ? ' active' : ''}">
       <div class="ticket-head">
@@ -560,8 +580,77 @@ function ticketHtml(b) {
       </div>
       ${note ? `<p class="ticket-note">${esc(note)}</p>` : ''}
       ${actions.length ? `<div class="ticket-actions">${actions.join('')}</div>` : ''}
+      ${arrival}
       ${paymentHtml(b)}
     </div>`;
+}
+
+// ---------------------------------------------------------------- checking in on arrival (lib/arrival.js)
+// "Check me in when I arrive" on today's ticket. In the Android app the app does the checking (even
+// when it's closed) and reports how it's set up; in a browser it works while the page is open.
+function arrivalHtml() {
+  if (!arrivalAvailable(cfg)) return '';
+  const off = '<button type="button" class="link-btn" data-act="arrival-off">Turn off</button>';
+  if (android) {
+    if (typeof android.enableArrival !== 'function') return '';
+    const a = (appStatus() || {}).arrival || {};
+    if (!a.on) return `<div class="arrival-row"><button type="button" class="btn btn-ghost btn-sm" data-act="arrival-on">Check me in when I arrive</button><p class="small muted">Uses your location only on the day of your booking, from two hours before your slot.</p></div>`;
+    if (!a.location) return `<div class="arrival-row"><p class="small muted">Allow location so the app can check you in when you arrive.</p><button type="button" class="btn btn-ghost btn-sm" data-act="arrival-on">Allow location</button> ${off}</div>`;
+    if (!a.background) return `<div class="arrival-row"><p class="small muted">The app checks you in while it's open. To be checked in with the app closed, allow location all the time.</p><button type="button" class="btn btn-ghost btn-sm" data-act="arrival-on">Allow all the time</button> ${off}</div>`;
+    return `<div class="arrival-row"><p class="small ok-text">We'll check you in when you arrive.</p> ${off}</div>`;
+  }
+  if (!('geolocation' in navigator)) return '';
+  if (!arrivalOn()) return `<div class="arrival-row"><button type="button" class="btn btn-ghost btn-sm" data-act="arrival-on">Check me in when I arrive</button><p class="small muted">Uses your location while this page is open, only on the day of your booking.</p></div>`;
+  if (arrivalDenied()) return `<div class="arrival-row"><p class="small muted">Location is blocked for this site, so you can't be checked in automatically. Tap "I'm here" when you arrive.</p> ${off}</div>`;
+  return `<div class="arrival-row"><p class="small ok-text">We'll check you in when you arrive. Keep this page open.</p> ${off}</div>`;
+}
+
+function onArrived() {
+  toast(t('alert_arrived'));
+  if (document.hidden) notify(cfg.shop_name, t('alert_arrived'), { tag: 'arrived' });
+  refreshMyBookings().catch(() => {});
+}
+
+// A checked-in client is next when nobody still waiting has an earlier slot today (from the public
+// queue, refreshed every 20 seconds while the page is open).
+function isNextUp(b) {
+  if (b.status !== 'checked_in' || b.booking_date !== todayISO()) return false;
+  if (!todayQueue || Date.now() - todayQueue.at > 120000) return false;
+  const mine = toMin(b.slot_time);
+  if (!todayQueue.rows.some((r) => r.status === 'checked_in' && toMin(r.slot_time) === mine)) return false;
+  return !todayQueue.rows.some((r) => WAITING.includes(r.status) && toMin(r.slot_time) < mine);
+}
+
+// Says "you're next, please don't leave" once per booking. Inside the app, the app's own notification
+// does that, so the page only updates the ticket.
+const nextShown = new Set();
+function checkNextUp() {
+  let changed = false;
+  for (const b of myRows) {
+    if (!isNextUp(b) || nextShown.has(b.client_token)) continue;
+    nextShown.add(b.client_token);
+    changed = true;
+    const key = `alphi.next.${b.client_token}`;
+    if (storageGet(key) === '1') continue; // already told on an earlier visit
+    storageSet(key, '1');
+    toast(t('alert_next_here'));
+    if (!android) {
+      chime({ force: true });
+      notify(cfg.shop_name, t('alert_next_here'), { tag: `next-${b.client_token}` });
+    }
+  }
+  if (changed) renderMyBookings();
+}
+
+async function setArrival(on) {
+  if (android) {
+    try { if (on) android.enableArrival(); else android.disableArrival(); } catch { /* older app */ }
+    renderMyBookings();
+    return;
+  }
+  if (on) turnArrivalOn(() => { renderMyBookings(); refreshMyBookings().catch(() => {}); });
+  else turnArrivalOff();
+  renderMyBookings();
 }
 
 function renderMyBookings() {
@@ -698,6 +787,12 @@ async function onTicketAction(e) {
       break;
     case 'checkin':
       await withBusy(btn, () => doCheckIn(token));
+      break;
+    case 'arrival-on':
+      await setArrival(true);
+      break;
+    case 'arrival-off':
+      await setArrival(false);
       break;
     case 'calendar':
       if (b) addToCalendar(b);

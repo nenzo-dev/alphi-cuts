@@ -22,15 +22,20 @@
       now: "It's your turn at Test Cuts. Please go to the chair now.",
       called: "You're next at Test Cuts. Please be at the shop now.",
       onDeck: "You're 2 away at Test Cuts. Start heading over.",
+      arrived: "You're checked in at Test Cuts. Alfred can see you're here.",
+      nextHere: "You're next at Test Cuts. Please don't leave.",
     },
+    // A test shop for "Check me in when I arrive"; the emulator test moves the phone there.
+    arrival: { lat: -15.33, lng: 28.68, radius: 150 },
     tokens: [token],
-    bookings: [{ token, id: 'ci-test', status: 'booked', startMs: start, endMs: start + 30 * 60000, label: 'TEST' }],
+    bookings: [{ token, id: 'ci-test', status: 'booked', startMs: start, endMs: start + 30 * 60000, label: 'TEST', slot: '12:00:00' }],
   };
   let out = 'bridge: ' + typeof window.AlphiAndroid + '\n';
   try {
     out += 'info: ' + window.AlphiAndroid.info() + '\n';
     window.AlphiAndroid.syncBookings(JSON.stringify(payload));
     out += 'synced; slot starts ' + new Date(start).toISOString() + '\n';
+    if (window.AlphiAndroid.enableArrival) { window.AlphiAndroid.enableArrival(); out += 'arrival on\n'; }
   } catch (e) {
     out += 'ERROR ' + e + '\n';
   }

@@ -186,6 +186,18 @@ final class Notifier {
         post(c, CH_UPDATES, infoId(token), title, body);
     }
 
+    /** Checked in by arriving at the shop ("Check me in when I arrive"). */
+    static void arrived(Context c, JSONObject booking) {
+        String token = booking.optString("token");
+        post(c, CH_UPDATES, infoId(token), "You're checked in", text(c, "arrived", "You're checked in. The barber can see you're here."));
+    }
+
+    /** Checked in and next in line: please stay. */
+    static void nextHere(Context c, JSONObject booking) {
+        String token = booking.optString("token");
+        post(c, CH_UPDATES, infoId(token), "You're next", text(c, "nextHere", "You're next. Please don't leave the shop."));
+    }
+
     static void message(Context c, String ownerFirst) {
         String who = ownerFirst == null || ownerFirst.isEmpty() ? "the barber" : ownerFirst;
         post(c, CH_MESSAGES, 2, "New message from " + who, "Open the app to read it.");

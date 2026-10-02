@@ -54,6 +54,11 @@ final class Api {
         return text.isEmpty() ? new JSONArray() : new JSONArray(text);
     }
 
+    static JSONObject object(JSONObject sync, String fn, JSONObject body) throws Exception {
+        String text = call(sync, fn, body).trim();
+        return text.isEmpty() || "null".equals(text) ? new JSONObject() : new JSONObject(text);
+    }
+
     static void checkIn(Context c, String token) throws Exception {
         JSONObject sync = Store.sync(c);
         if (sync == null) throw new IOException("no booking data");

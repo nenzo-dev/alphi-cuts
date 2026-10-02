@@ -220,6 +220,7 @@ const TABS = {
   requests: () => loadRequestsTab(),
   hours: () => loadHoursTab(),
   shop: () => loadShopTab(),
+  arrivals: () => loadArrivalTab(),
   page: () => loadPageTab(),
   legal: () => loadLegalTab(),
   styles: () => loadStylesTab(),
@@ -307,6 +308,9 @@ function wireShell() {
   $('#hours-form').addEventListener('submit', saveHours);
   $('#hours-form').addEventListener('input', updateHoursPreview);
   $('#shop-form').addEventListener('submit', saveShop);
+  $('#arrival-form').addEventListener('submit', saveArrival);
+  $('#arrival-form').addEventListener('input', updateArrivalMap);
+  $('#ar-here').addEventListener('click', useCurrentLocation);
   $('#page-form').addEventListener('submit', savePage);
   $('#pg-groups').addEventListener('click', onTextReset);
   $('#pg-groups').addEventListener('input', onTextInput);
@@ -365,6 +369,12 @@ const WAITING = ['booked', 'on_deck', 'called', 'checked_in'];
 const shopClock = new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 // Under the booked time: when the cut actually started (makes early cuts obvious).
+// Checked in by arriving at the shop (their phone told the site), rather than by tapping "I'm here".
+function arrivedTag(r) {
+  return r.arrived_auto && ['checked_in', 'in_chair', 'done'].includes(r.status)
+    ? ' <span class="arrived-tag" title="Checked in automatically when they arrived">arrived</span>' : '';
+}
+
 function startedNote(r) {
   if (!r.started_at || !['in_chair', 'done'].includes(r.status)) return '';
   return `<div class="small muted">started ${fmtTime(shopClock.format(new Date(r.started_at)))}</div>`;
@@ -397,7 +407,7 @@ async function loadQueueTab() {
   $('#queue-table').innerHTML = visible.map((r) => `
     <tr>
       <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
-      <td data-label="Name">${esc(r.client_name)}</td>
+      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}</td>
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
@@ -412,7 +422,7 @@ async function loadBookingsTab() {
   $('#bookings-table').innerHTML = rows.map((r) => `
     <tr>
       <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
-      <td data-label="Name">${esc(r.client_name)}</td>
+      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}</td>
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
@@ -766,6 +776,81 @@ async function saveShop(e) {
       await rpc('admin_update_site_config', { p: payload });
       await loadShopTab();
       showMsg(msg, 'Saved.', 'ok');
+    } catch (err) {
+      report(err, msg);
+    }
+  });
+}
+
+// ---------------------------------------------------------------- arrivals (check-in on arrival, automatic start)
+async function loadArrivalTab() {
+  await loadSite();
+  const has = Object.prototype.hasOwnProperty.call(site, 'shop_lat');
+  $('#ar-save').disabled = !has;
+  showMsg($('#ar-msg'), has ? '' : 'The database needs the 2.5.0 update (supabase/migrations/12_arrival_checkin.sql) before these can be saved.', has ? 'ok' : 'error');
+  showMsg($('#ar-here-msg'), '');
+  $('#ar-lat').value = site.shop_lat ?? '';
+  $('#ar-lng').value = site.shop_lng ?? '';
+  $('#ar-radius').value = site.arrival_radius_m ?? 150;
+  $('#ar-auto-checkin').checked = site.auto_checkin !== false;
+  $('#ar-auto-start').checked = site.auto_start !== false;
+  updateArrivalMap();
+}
+
+function arrivalInputs() {
+  const lat = $('#ar-lat').value.trim();
+  const lng = $('#ar-lng').value.trim();
+  return { lat: lat === '' ? null : Number(lat), lng: lng === '' ? null : Number(lng) };
+}
+
+function updateArrivalMap() {
+  const { lat, lng } = arrivalInputs();
+  const ok = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  const link = $('#ar-map');
+  link.hidden = !ok;
+  if (ok) link.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;
+}
+
+function useCurrentLocation() {
+  const msg = $('#ar-here-msg');
+  if (!('geolocation' in navigator)) { showMsg(msg, "This browser can't share its location. Type the latitude and longitude instead.", 'error'); return; }
+  const btn = $('#ar-here');
+  btn.disabled = true;
+  showMsg(msg, 'Finding your location...');
+  navigator.geolocation.getCurrentPosition((pos) => {
+    btn.disabled = false;
+    $('#ar-lat').value = pos.coords.latitude.toFixed(6);
+    $('#ar-lng').value = pos.coords.longitude.toFixed(6);
+    updateArrivalMap();
+    const acc = Math.round(pos.coords.accuracy || 0);
+    showMsg(msg, `Found, accurate to about ${acc} m. Check it on the map, then save.`, acc > 100 ? 'error' : 'ok');
+  }, (err) => {
+    btn.disabled = false;
+    showMsg(msg, err.code === 1
+      ? 'Location is blocked for this site. Allow it in your browser settings, or type the latitude and longitude.'
+      : "Couldn't find your location. Try again near a window, or type the latitude and longitude.", 'error');
+  }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+}
+
+async function saveArrival(e) {
+  e.preventDefault();
+  const msg = $('#ar-msg');
+  const { lat, lng } = arrivalInputs();
+  if ((lat === null) !== (lng === null)) { showMsg(msg, 'Enter both the latitude and the longitude, or leave both empty.', 'error'); return; }
+  if (lat !== null && (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180)) {
+    showMsg(msg, "That location isn't valid. Check the latitude and longitude.", 'error');
+    return;
+  }
+  const radius = Number($('#ar-radius').value || 150);
+  if (!Number.isInteger(radius) || radius < 30 || radius > 1000) { showMsg(msg, 'The arrival distance must be between 30 and 1000 metres.', 'error'); return; }
+  await withBusy($('#ar-save'), async () => {
+    try {
+      await rpc('admin_set_arrival', {
+        p_lat: lat, p_lng: lng, p_radius: radius,
+        p_auto_checkin: $('#ar-auto-checkin').checked, p_auto_start: $('#ar-auto-start').checked,
+      });
+      await loadArrivalTab();
+      showMsg(msg, lat === null ? 'Saved. Set the shop\'s location to start checking clients in on arrival.' : 'Saved.', 'ok');
     } catch (err) {
       report(err, msg);
     }

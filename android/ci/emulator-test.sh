@@ -2,8 +2,10 @@
 # Runs inside the Android emulator on GitHub Actions (.github/workflows/android.yml).
 #
 #  1. The release build installs and opens the live website.
-#  2. The debug build (same code, plus a test page) is handed a booking that starts in 100 s.
-#     Then the app is closed (its process killed) and the screen turned off. The heads-up must
+#  2. The debug build (same code, plus a test page) is handed a booking that starts in 100 s, with
+#     "Check me in when I arrive" on. With the app in the background the phone is moved to the test
+#     shop, and the app must notice. Then the app is closed (its process killed) and the screen
+#     turned off. The heads-up must
 #     arrive, then the alarm must ring full-screen over the lock screen, and "Stop alarm" must
 #     silence it.
 #  3. The app updates itself from a local server standing in for the website. First with
@@ -88,6 +90,10 @@ if [ -n "$DEBUG" ] && adb install -r "$DEBUG"; then pass "debug APK installs"; e
 adb shell pm grant "$DBG" android.permission.POST_NOTIFICATIONS
 adb shell appops set "$DBG" USE_FULL_SCREEN_INTENT allow
 adb shell dumpsys deviceidle whitelist +"$DBG" >/dev/null   # same as "allow background use"
+# "Check me in when I arrive": location allowed all the time, and the phone starts 2 km from the test shop.
+for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION; do adb shell pm grant "$DBG" android.permission.$p; done
+adb shell cmd location set-location-enabled true >/dev/null 2>&1
+adb emu geo fix 28.70 -15.33 >/dev/null 2>&1
 
 adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/bridge-test.html
 T0=$SECONDS
@@ -99,6 +105,13 @@ grep -qF "com.alphicuts.app.DUE" "$OUT/alarms.txt" && pass "slot alarm is set" |
 grep -qF "com.alphicuts.app.REMINDER" "$OUT/alarms.txt" && pass "heads-up alarm is set" || fail "heads-up alarm was not set"
 adb shell dumpsys activity services "$DBG" > "$OUT/services.txt"
 grep -qF "WatchService" "$OUT/services.txt" && pass "booking watcher is running" || fail "booking watcher is not running"
+
+# The client walks into the shop with the app in the background: the watcher must notice. (The test
+# database address doesn't exist, so the check-in itself fails quietly and the alarm still rings.)
+adb shell input keyevent KEYCODE_HOME
+arrived() { adb emu geo fix 28.68 -15.33 >/dev/null 2>&1; adb logcat -d -s AlPhiCuts:V | grep -qF "Arrived at the shop"; }
+if wait_for 30 arrived; then pass "arriving at the shop is noticed with the app in the background"; else fail "arriving at the shop was not noticed"; fi
+adb logcat -d -s AlPhiCuts:V | grep -E "Arrived|arrival|location" | tail -5 >> "$OUT/results.txt"
 
 # Close the app completely: leave it, then kill its process. Alarms live in the system, not the app.
 adb shell input keyevent KEYCODE_HOME
