@@ -23,7 +23,9 @@ final class Notifier {
     static final String CH_UPDATES = "booking_updates";
     static final String CH_MESSAGES = "messages";
     static final String CH_WATCH = "watching";
+    static final String CH_APP_UPDATES = "app_updates";
     static final int WATCH_ID = 1;
+    private static final int UPDATE_ID = 4;
     private static final int GOLD = 0xFFD4AF37;
     private static final long[] ALARM_VIBRATION = {0, 800, 400, 800, 400, 1200};
 
@@ -55,7 +57,10 @@ final class Notifier {
         watching.setDescription("Shown while the app keeps an eye on your booking");
         watching.setShowBadge(false);
 
-        nm.createNotificationChannels(Arrays.asList(alarm, updates, messages, watching));
+        NotificationChannel appUpdates = new NotificationChannel(CH_APP_UPDATES, "App updates", NotificationManager.IMPORTANCE_DEFAULT);
+        appUpdates.setDescription("When a new version of the app is ready to install");
+
+        nm.createNotificationChannels(Arrays.asList(alarm, updates, messages, watching, appUpdates));
     }
 
     static Uri alarmSound() {
@@ -196,6 +201,43 @@ final class Notifier {
                 .setAutoCancel(true)
                 .build();
         c.getSystemService(NotificationManager.class).notify(id, n);
+    }
+
+    /** A newer version is out: tapping it, or its Update button, opens the app and starts the update. */
+    static void update(Context c, String version) {
+        channels(c);
+        Intent i = new Intent(c, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_UPDATE, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent pi = PendingIntent.getActivity(c, 30, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        String body = "This version of the app will no longer be supported. Tap Update to install the new one.";
+        Notification n = builder(c, CH_APP_UPDATES)
+                .setContentTitle("AlPhi Cuts " + version + " is ready")
+                .setContentText(body)
+                .setStyle(new Notification.BigTextStyle().bigText(body))
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_stat_bell), "Update", pi).build())
+                .build();
+        c.getSystemService(NotificationManager.class).notify(UPDATE_ID, n);
+    }
+
+    /** The download finished while the person was elsewhere: one tap shows Android's "Update?" screen. */
+    static void updateReady(Context c, Intent confirm) {
+        channels(c);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+        PendingIntent pi = PendingIntent.getActivity(c, 31, confirm, flags);
+        Notification n = builder(c, CH_APP_UPDATES)
+                .setContentTitle("Finish updating AlPhi Cuts")
+                .setContentText("The new version is downloaded. Tap to install it.")
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build();
+        c.getSystemService(NotificationManager.class).notify(UPDATE_ID, n);
+    }
+
+    static void cancelUpdate(Context c) {
+        c.getSystemService(NotificationManager.class).cancel(UPDATE_ID);
     }
 
     static Notification watching(Context c, String body) {

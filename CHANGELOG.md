@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.4.0 (2026-10-02)
+
+- Android app 1.2.0 updates itself. It looks for a newer version when it opens and every few hours
+  in the background, and shows a notification and a pop-up saying the version on the phone will no
+  longer be supported. "Update now" closes the pop-up, downloads the new version, checks it's the
+  exact file published here and hands it to Android's installer; the bar at the top shows progress.
+- If the phone blocks the install, the app says why, and "Open settings" goes straight to the setting
+  that lifts the block: "Install unknown apps" for the app, a phone-wide block on apps from outside
+  the Play Store (such as Samsung's Auto Blocker), a security check such as Google Play Protect, or
+  low storage. Once "Install unknown apps" or the phone-wide block is turned off, the update carries
+  on by itself.
+- Phones with app 1.0.0 or 1.1.0 get the same pop-up and download the new version through the browser.
+- The privacy policy and terms mention the update checks.
+
 ## 2.3.0 (2026-09-30)
 
 Needs `supabase/migrations/11_style_request_cleanup.sql` run on the existing database.

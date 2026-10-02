@@ -1,7 +1,7 @@
 // Default wording for the privacy policy, terms of use and disclaimer. The owner can replace any
 // of them from the panel (Legal pages tab). {shop}, {owner}, {owner_first} and {slot} are filled in
 // from the shop's settings.
-export const LEGAL_UPDATED = '30 September 2026';
+export const LEGAL_UPDATED = '2 October 2026';
 
 export const LEGAL_DOCS = {
   privacy: {
@@ -30,6 +30,7 @@ The app shows this same website, so everything on this page applies to it. On to
 - It keeps your booking time and the private code for each booking on your phone, so it can set alarms for them.
 - On the day of a booking, from about two hours before your slot until it ends, it checks your booking and any replies from the shop every so often, even when the app is closed. While it does this, Android shows a "Keeping an eye on your booking" notification.
 - It asks to show notifications, set alarms, show a full-screen alert when it's your turn, and run in the background. You can turn any of these off in your phone's settings, but alerts may then not work.
+- Every few hours it checks this website for a newer version of the app and tells you when one is ready. Nothing about you is sent. An update only installs when you tap Update and confirm on Android's own screen, and only if it's the exact file published here, signed by the shop. To install updates, the app asks you to allow it to install apps; if your phone blocks that, the app shows you the setting that controls it.
 
 The app has no ads or trackers, and it doesn't use your contacts, location, camera or microphone. It only reads a photo if you choose one to send with a style request. Uninstalling the app deletes everything it stored on your phone.
 
@@ -102,7 +103,7 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 ## The Android app
 
 - Only install the app from this website. A copy from anywhere else may not be genuine.
-- When the app says a new version is ready, please update it.
+- When the app says a new version is ready, please update it. Older versions are no longer supported once a new one is out, and may stop working.
 - These terms apply to the app too. We may change or stop offering the app at any time.
 
 ## Liability

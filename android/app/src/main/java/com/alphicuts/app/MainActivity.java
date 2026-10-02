@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -35,6 +36,7 @@ public class MainActivity extends Activity {
     static final String SITE_URL = "https://alphi-cuts.pages.dev/";
     static final String SITE_HOST = "alphi-cuts.pages.dev";
     static final String EXTRA_OPEN = "open";
+    static final String EXTRA_UPDATE = "update";
     private static final String TAG = "AlPhiCuts";
     private static final String OFFLINE_URL = "file:///android_asset/offline.html";
     private static final String TEST_PREFIX = "file:///android_asset/test/";
@@ -42,18 +44,27 @@ public class MainActivity extends Activity {
     private static final int REQ_NOTIFICATIONS = 11;
 
     private static volatile boolean visible;
+    private static volatile MainActivity current;
     private volatile boolean trusted;
     private boolean debuggable;
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+    private boolean startUpdateOnResume;
+    private AlertDialog blockDialog;
+    private String pendingBlock;
 
     static boolean isVisible() {
         return visible;
     }
 
+    static MainActivity current() {
+        return current;
+    }
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        current = this;
         Notifier.channels(this);
         debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
         if (debuggable) WebView.setWebContentsDebuggingEnabled(true);
@@ -84,6 +95,29 @@ public class MainActivity extends Activity {
 
         askForNotificationsOnce();
         Scheduler.scheduleAll(this); // re-arm alarms whenever the app is opened
+
+        // Act on "Update" (from the update notification) only on a fresh start. When Android rebuilds
+        // this screen later, getIntent() is still that first intent; anything new comes to onNewIntent.
+        boolean fresh = state == null && (getIntent().getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0;
+        Intent opened = fresh ? getIntent() : new Intent();
+        startUpdateOnResume = opened.getBooleanExtra(EXTRA_UPDATE, false);
+        Updater.schedule(this);
+        if (!testUpdate(opened)) Updater.checkInBackground(this, false);
+    }
+
+    /** Debug builds under test can fetch updates from a local server (see ci/emulator-test.sh). */
+    private boolean testUpdate(Intent i) {
+        String base = i.getStringExtra("updateBase");
+        if (!debuggable || base == null || !base.startsWith("http")) return false;
+        Updater.setTestBase(this, base);
+        final boolean auto = i.getBooleanExtra("autoUpdate", false);
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            Updater.check(app, false, true);
+            tellPage();
+            if (auto) runOnUiThread(() -> Updater.start(this));
+        }).start();
+        return true;
     }
 
     private static String hashFor(Intent i) {
@@ -93,9 +127,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         if ("book".equals(intent.getStringExtra(EXTRA_OPEN)) && trusted) {
             web.evaluateJavascript("location.hash='#book'", null);
         }
+        if (intent.getBooleanExtra(EXTRA_UPDATE, false)) startUpdateOnResume = true;
+        testUpdate(intent);
     }
 
     // ---------------------------------------------------------------- which pages may use the bridge
@@ -231,6 +268,13 @@ public class MainActivity extends Activity {
             o.put("fullScreen", fullScreen);
             o.put("background", background);
             o.put("ready", notifications && exact && fullScreen && background);
+            // App updates: the newer version that's ready, and anything on the phone blocking installs.
+            JSONObject u = Updater.available(this);
+            if (u != null) {
+                o.put("update", new JSONObject().put("versionName", u.optString("versionName"))
+                        .put("versionCode", u.optInt("versionCode")).put("size", u.optLong("size")));
+            }
+            o.put("installBlocked", installBlocked());
         } catch (Exception ignored) {
             // leave whatever was filled in
         }
@@ -316,8 +360,64 @@ public class MainActivity extends Activity {
         requestAlerts();
     }
 
-    private void tellPage() {
-        if (trusted) web.evaluateJavascript("window.dispatchEvent(new Event('alphiapp'))", null);
+    void tellPage() {
+        runJs("window.dispatchEvent(new Event('alphiapp'))");
+    }
+
+    private void runJs(String js) {
+        runOnUiThread(() -> {
+            if (web != null && trusted) web.evaluateJavascript(js, null);
+        });
+    }
+
+    // ---------------------------------------------------------------- app updates
+    /** Tells the website how an update is going: downloading (with %), checking, installing, confirm, blocked, error. */
+    void updateProgress(String state, int pct) {
+        runJs("window.__alphiUpdate&&window.__alphiUpdate(" + JSONObject.quote(state) + "," + pct + ")");
+    }
+
+    /** What's blocking installs, if the last attempt was blocked; "" otherwise. */
+    String installBlocked() {
+        String reason = Store.getString(this, "installBlocked");
+        if (reason == null || !InstallBlock.known(reason)) return "";
+        // A block that a setting lifts is checked again, in case it was changed outside the app.
+        if (InstallBlock.resumesAfterSettings(reason) && InstallBlock.before(this).isEmpty()) {
+            Store.remove(this, "installBlocked");
+            return "";
+        }
+        return reason;
+    }
+
+    /** The phone blocks the update: say why, with a button to the setting that lifts it. */
+    void showInstallBlock(String reason) {
+        Store.putString(this, "installBlocked", reason);
+        updateProgress("blocked", 0);
+        if (isFinishing()) return;
+        if (!visible) {
+            pendingBlock = reason; // shown as soon as the screen is back
+            return;
+        }
+        if (blockDialog != null && blockDialog.isShowing()) blockDialog.dismiss();
+        blockDialog = new AlertDialog.Builder(this)
+                .setTitle(InstallBlock.title(reason))
+                .setMessage(InstallBlock.message(reason))
+                .setPositiveButton("Open settings", (d, w) -> openInstallSettings(reason))
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    /** "Open settings" (here or on the website): the screen that lifts the block. */
+    void openInstallSettings(String reason) {
+        String r = reason == null || reason.isEmpty() ? installBlocked() : reason;
+        if (r.isEmpty()) r = InstallBlock.before(this);
+        if (r.isEmpty()) {
+            Updater.start(this); // nothing is blocking any more
+            return;
+        }
+        // Back from the settings screen, the update carries on by itself once the block is lifted.
+        Store.putInt(this, "resumeUpdate", InstallBlock.resumesAfterSettings(r) ? 1 : 0);
+        Log.i(TAG, "Opening settings for: " + r);
+        InstallBlock.open(this, r);
     }
 
     void printPage() {
@@ -337,6 +437,21 @@ public class MainActivity extends Activity {
         web.onResume();
         web.resumeTimers();
         tellPage();
+        if (pendingBlock != null) {
+            String r = pendingBlock;
+            pendingBlock = null;
+            showInstallBlock(r);
+        } else if (Store.getInt(this, "resumeUpdate", 0) == 1) {
+            // Back from the settings screen that blocked the update: carry on once it's lifted.
+            Store.putInt(this, "resumeUpdate", 0);
+            if (InstallBlock.before(this).isEmpty()) {
+                Store.remove(this, "installBlocked");
+                Updater.start(this);
+            }
+        } else if (startUpdateOnResume) {
+            startUpdateOnResume = false;
+            Updater.start(this); // "Update" on the update notification
+        }
     }
 
     @Override
@@ -358,6 +473,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (current == this) current = null;
+        if (blockDialog != null && blockDialog.isShowing()) blockDialog.dismiss();
         if (web != null) {
             web.destroy();
             web = null;

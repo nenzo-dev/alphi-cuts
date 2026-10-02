@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update test</title>
+</head>
+<body style="background:#171512;color:#f3efe6;font-family:sans-serif;padding:20px">
+<h2>Update test (debug build only)</h2>
+<pre id="out" style="white-space:pre-wrap"></pre>
+<script>
+  // A page with no bookings, for the update test in android/ci/emulator-test.sh: it only shows what
+  // the app reports about updates, so no alarm can go off in the middle of the test.
+  const out = document.getElementById('out');
+  const show = (s) => { out.textContent += s + '\n'; console.log(s); };
+  window.__alphiUpdate = (stage, pct) => show('update: ' + stage + ' ' + pct);
+  window.addEventListener('alphiapp', () => show('app: ' + window.AlphiAndroid.info()));
+  show('bridge: ' + typeof window.AlphiAndroid);
+</script>
+</body>
+</html>

@@ -23,13 +23,14 @@
 <link rel="modulepreload" href="js/lib/notify.js">
 <link rel="modulepreload" href="js/lib/ics.js">
 <link rel="modulepreload" href="js/lib/image.js">
+<link rel="modulepreload" href="js/lib/appupdate.js">
 <link rel="modulepreload" href="js/styles-data.js">
 </head>
 <body>
 <a class="skip-link" href="#book">Skip to booking</a>
 <div class="bg-watermark" aria-hidden="true"></div>
 <div class="announcement" id="announcement" role="note" hidden></div>
-<div class="announcement" id="app-update" role="note" hidden>A new version of the app is ready. <a href="app/alphi-cuts.apk">Update now</a></div>
+<div class="announcement app-update" id="app-update" role="status" aria-live="polite" hidden></div>
 
 <header class="site-header">
   <div class="container row">
@@ -257,7 +258,7 @@
       <a href="disclaimer">Disclaimer</a>
       <a href="admin">Owner login</a>
     </nav>
-    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.3.0</span></p>
+    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.4.0</span></p>
   </div>
 </footer>
 

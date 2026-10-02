@@ -14,6 +14,7 @@ import { armAudioUnlock, unlockAudio, audioUnlocked, chime } from './lib/rington
 import { configureAlarms, updateAlarms, startsIn } from './lib/alarm.js';
 import { bookingIcs, downloadFile } from './lib/ics.js';
 import { prepareImage } from './lib/image.js';
+import { watchAppUpdate } from './lib/appupdate.js';
 import { HAIRCUT_STYLES, styleThumb, stylePhotos } from './styles-data.js';
 
 installGlobalErrorHandlers();
@@ -868,14 +869,6 @@ async function installWebApp() {
   $('#pwa-install-btn').hidden = true;
 }
 
-// Inside the app: offer the newer build when one has been published.
-async function checkAppUpdate() {
-  const st = appStatus();
-  if (!st || !st.code) return;
-  const info = await apkInfo();
-  if (info && Number(info.versionCode) > Number(st.code)) $('#app-update').hidden = false;
-}
-
 // ---------------------------------------------------------------- navigation
 function wireNav() {
   const links = $('#nav-links');
@@ -956,7 +949,7 @@ async function boot() {
   wire();
   loadDbStyles().then(() => { if (dbStyles.length) renderStyleGallery(); }).catch(() => {});
   setupAppSection().catch(() => {});
-  checkAppUpdate().catch(() => {});
+  watchAppUpdate(android); // inside the Android app: the update pop-up and bar (lib/appupdate.js)
 
   for (let attempt = 0; !cfg; attempt++) {
     try {

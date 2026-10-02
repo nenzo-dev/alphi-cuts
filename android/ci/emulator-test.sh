@@ -6,6 +6,9 @@
 #     Then the app is closed (its process killed) and the screen turned off. The heads-up must
 #     arrive, then the alarm must ring full-screen over the lock screen, and "Stop alarm" must
 #     silence it.
+#  3. The app updates itself from a local server standing in for the website. First with
+#     "Install unknown apps" off: the app must say so and "Open settings" must open that setting.
+#     Once it's on, the update carries on by itself, and Android's installer replaces the app.
 #
 # Screenshots, logs and results.txt go to ci-results/.
 set -u
@@ -37,12 +40,15 @@ alarm_screen_up() { adb shell dumpsys activity activities | grep -E "topResumedA
 ui_dump() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml; }
 tap_text() {
   local bounds
-  bounds=$(ui_dump | tr '>' '\n' | grep -F "text=\"$1\"" | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | head -1)
+  # Any capitalisation: some Android builds show buttons in capitals ("UPDATE").
+  bounds=$(ui_dump | tr '>' '\n' | grep -iF "text=\"$1\"" | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | head -1)
   [ -n "$bounds" ] || return 1
   local x1 y1 x2 y2
   read -r x1 y1 x2 y2 <<<"$(echo "$bounds" | grep -oE '[0-9]+' | tr '\n' ' ')"
   adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
 }
+screen_has() { ui_dump | grep -qiF "$1"; }
+focus_is() { adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$1"; }
 
 adb wait-for-device
 adb root >/dev/null 2>&1
@@ -51,6 +57,9 @@ adb wait-for-device
 adb shell settings put system screen_off_timeout 1800000
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
+# A fresh emulator can take a while to get online; the site can't load before that.
+dns_ok() { adb shell "ping -c 1 -W 2 alphi-cuts.pages.dev" 2>&1 | grep -q "^PING"; }
+wait_for 180 dns_ok || echo "NOTE: the emulator still can't look up alphi-cuts.pages.dev" | tee -a "$OUT/results.txt"
 adb logcat -c
 
 # ---------------------------------------------------------------- 1. release build opens the site
@@ -58,7 +67,10 @@ RELEASE=$(ls "$APKS"/release/*.apk 2>/dev/null | head -1)
 if [ -n "$RELEASE" ] && adb install -r "$RELEASE"; then pass "release APK installs"; else fail "release APK did not install"; fi
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
 adb shell am start -W -n "$PKG/.MainActivity"
-sleep 25
+# The first load on a fresh emulator can be slow: wait for the site (or the offline page).
+release_loaded() { adb logcat -d -s AlPhiCuts:V | grep -qE "Loaded https://alphi-cuts.pages.dev/|offline page"; }
+wait_for 90 release_loaded
+sleep 3
 shot 01-release-home
 if adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$PKG/"; then pass "app opens and stays open"; else fail "app did not stay open"; fi
 adb logcat -d -s AlPhiCuts:V > "$OUT/release-log.txt"
@@ -68,6 +80,7 @@ else
   fail "live website did not show inside the app"
 fi
 adb shell input keyevent KEYCODE_HOME
+adb shell am force-stop "$PKG"   # frees its memory for the rest of the test
 
 # ---------------------------------------------------------------- 2. alarm rings with the app closed
 DEBUG=$(ls "$APKS"/debug/*.apk 2>/dev/null | head -1)
@@ -128,6 +141,57 @@ else
   fail "could not find the Stop alarm button"
 fi
 shot 04-after-stop
+
+# ---------------------------------------------------------------- 3. the app updates itself
+# A local server stands in for the website: it offers "version 9.9.9" (really this same debug build).
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+adb logcat -d -s AlPhiCuts:V > "$OUT/alarm-log.txt"
+UPD=$(mktemp -d)
+mkdir -p "$UPD/app"
+cp "$DEBUG" "$UPD/app/alphi-cuts.apk"
+printf '{"versionName":"9.9.9","versionCode":99,"size":%s,"sha256":"%s"}\n' \
+  "$(stat -c %s "$UPD/app/alphi-cuts.apk")" "$(sha256sum "$UPD/app/alphi-cuts.apk" | cut -d' ' -f1)" > "$UPD/app/android.json"
+python3 -m http.server 8000 --directory "$UPD" >/dev/null 2>&1 &
+SERVER=$!
+sleep 2
+# Like a phone where "Install unknown apps" is still off for the app.
+adb shell am force-stop "$DBG"
+adb shell appops set "$DBG" REQUEST_INSTALL_PACKAGES deny
+before_update=$(adb shell dumpsys package "$DBG" | grep -m1 lastUpdateTime | tr -d '\r')
+adb logcat -c
+adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/update-test.html \
+  --es updateBase http://10.0.2.2:8000/ --ez autoUpdate true >/dev/null
+if wait_for 40 screen_has "Allow updates from AlPhi Cuts"; then pass "a blocked install says why"; else fail "no explanation when installs are blocked"; fi
+shot 05-update-blocked
+if tap_text "Open settings"; then
+  if wait_for 15 focus_is "com.android.settings"; then pass "Open settings opens the setting that allows installs"; else fail "Open settings did not open Settings"; fi
+  sleep 2
+  shot 06-install-setting
+else
+  fail "could not find the Open settings button"
+fi
+# Turn the setting on, as the person would, and come back: the update carries on by itself.
+adb shell appops set "$DBG" REQUEST_INSTALL_PACKAGES allow
+adb shell input keyevent KEYCODE_BACK
+handed() { adb logcat -d -s AlPhiCuts:V | grep -qF "Update handed to the installer"; }
+if wait_for 60 handed; then
+  pass "the update carries on once allowed, matches the published file and goes to the installer"
+else
+  fail "update did not reach the installer"
+  adb logcat -d -s AlPhiCuts:V | tail -20 >> "$OUT/results.txt"
+fi
+sleep 3
+shot 07-update-confirm
+if wait_for 20 tap_text "Update"; then
+  updated() { [ "$(adb shell dumpsys package "$DBG" | grep -m1 lastUpdateTime | tr -d '\r')" != "$before_update" ]; }
+  if wait_for 60 updated; then pass "Android's installer updates the app"; else fail "the app was not replaced"; fi
+else
+  fail "could not find the installer's Update button"
+fi
+shot 08-after-update
+adb logcat -d -s AlPhiCuts:V > "$OUT/update-log.txt"
+kill "$SERVER" 2>/dev/null
 
 adb logcat -d -b crash > "$OUT/crashes.txt" 2>/dev/null
 if grep -qF "alphicuts" "$OUT/crashes.txt"; then fail "the app crashed (see crashes.txt)"; else pass "no crashes"; fi

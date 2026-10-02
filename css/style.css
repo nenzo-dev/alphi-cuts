@@ -268,6 +268,14 @@ form .btn-block, .card .btn-block { margin-top: 16px; }
 #apk-meta { margin: 8px 0 0; }
 .ok-text { color: #7fd3a6; font-weight: 700; margin: 0; }
 .announcement a { color: var(--ink); text-decoration: underline; font-weight: 800; }
+/* Android app updates (js/lib/appupdate.js): the bar's buttons, its progress spinner, and the pop-up */
+.app-update { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px 10px; }
+.au-btn { background: var(--ink); color: var(--gold-soft); border: 1px solid var(--ink); border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; min-height: 32px; }
+.au-btn-plain { background: transparent; color: var(--ink); }
+.au-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(23, 21, 18, .3); border-top-color: var(--ink); animation: au-spin .8s linear infinite; display: inline-block; }
+@keyframes au-spin { to { transform: rotate(360deg); } }
+.app-update-pop p { color: var(--muted); line-height: 1.55; margin: 0 0 16px; }
+.app-update-pop .btn + .btn { margin-top: 8px; }
 .qr-box { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
 .qr-box img { background: #fff; padding: 10px; border-radius: 10px; width: 160px; height: 160px; }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -55,4 +55,22 @@ final class Bridge {
     public void print() {
         if (activity.isTrustedPage()) activity.runOnUiThread(activity::printPage);
     }
+
+    /** "Update" on the website: download, check and install the newer version. */
+    @JavascriptInterface
+    public void startUpdate() {
+        if (activity.isTrustedPage()) activity.runOnUiThread(() -> Updater.start(activity));
+    }
+
+    /** Look for a newer version now; the website hears back through its 'alphiapp' event. */
+    @JavascriptInterface
+    public void checkUpdate() {
+        if (activity.isTrustedPage()) Updater.checkInBackground(activity, true);
+    }
+
+    /** "Open settings" when the phone blocks the update: the screen that lifts the block. */
+    @JavascriptInterface
+    public void openInstallSettings() {
+        if (activity.isTrustedPage()) activity.runOnUiThread(() -> activity.openInstallSettings(""));
+    }
 }

@@ -105,6 +105,18 @@ final class Store {
         prefs(c).edit().putInt(key, value).apply();
     }
 
+    static synchronized long getLong(Context c, String key, long def) {
+        return prefs(c).getLong(key, def);
+    }
+
+    static synchronized void putLong(Context c, String key, long value) {
+        prefs(c).edit().putLong(key, value).apply();
+    }
+
+    static synchronized void remove(Context c, String key) {
+        prefs(c).edit().remove(key).apply();
+    }
+
     static boolean contains(JSONArray arr, String value) {
         for (int i = 0; i < arr.length(); i++) {
             if (value.equals(arr.optString(i))) return true;
