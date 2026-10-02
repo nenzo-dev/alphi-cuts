@@ -3,11 +3,10 @@
 #
 #  1. The release build installs and opens the live website.
 #  2. The debug build (same code, plus a test page) is handed a booking that starts in 100 s, with
-#     "Check me in when I arrive" on. With the app in the background the phone is moved to the test
-#     shop, and the app must notice. Then the app is closed (its process killed) and the screen
+#     "Check me in when I arrive" on. Then the app is closed (its process killed) and the screen
 #     turned off. The heads-up must
 #     arrive, then the alarm must ring full-screen over the lock screen, and "Stop alarm" must
-#     silence it.
+#     silence it. Then the phone is moved to the test shop, and the app (still closed) must notice.
 #  3. The app updates itself from a local server standing in for the website. First with
 #     "Install unknown apps" off: the app must say so and "Open settings" must open that setting.
 #     Once it's on, the update carries on by itself, and Android's installer replaces the app.
@@ -106,12 +105,6 @@ grep -qF "com.alphicuts.app.REMINDER" "$OUT/alarms.txt" && pass "heads-up alarm 
 adb shell dumpsys activity services "$DBG" > "$OUT/services.txt"
 grep -qF "WatchService" "$OUT/services.txt" && pass "booking watcher is running" || fail "booking watcher is not running"
 
-# The client walks into the shop with the app in the background: the watcher must notice. (The test
-# database address doesn't exist, so the check-in itself fails quietly and the alarm still rings.)
-adb shell input keyevent KEYCODE_HOME
-arrived() { adb emu geo fix 28.68 -15.33 >/dev/null 2>&1; adb logcat -d -s AlPhiCuts:V | grep -qF "Arrived at the shop"; }
-if wait_for 30 arrived; then pass "arriving at the shop is noticed with the app in the background"; else fail "arriving at the shop was not noticed"; fi
-adb logcat -d -s AlPhiCuts:V | grep -E "Arrived|arrival|location" | tail -5 >> "$OUT/results.txt"
 
 # Close the app completely: leave it, then kill its process. Alarms live in the system, not the app.
 adb shell input keyevent KEYCODE_HOME
@@ -154,6 +147,14 @@ else
   fail "could not find the Stop alarm button"
 fi
 shot 04-after-stop
+
+# The client walks into the shop with the app closed (the alarm started the booking watcher again in
+# a new process): the watcher must notice from the phone's location. The test database address
+# doesn't exist, so the check-in itself then fails quietly.
+adb shell input keyevent KEYCODE_HOME
+arrived() { adb emu geo fix 28.68 -15.33 >/dev/null 2>&1; adb logcat -d -s AlPhiCuts:V | grep -qF "Arrived at the shop"; }
+if wait_for 90 arrived; then pass "arriving at the shop is noticed with the app closed"; else fail "arriving at the shop was not noticed"; fi
+adb logcat -d -s AlPhiCuts:V | grep -E "Arrived|Arrival|location" | tail -6 >> "$OUT/results.txt"
 
 # ---------------------------------------------------------------- 3. the app updates itself
 # A local server stands in for the website: it offers "version 9.9.9" (really this same debug build).

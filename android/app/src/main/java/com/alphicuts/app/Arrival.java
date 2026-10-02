@@ -16,8 +16,11 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * "Check me in when I arrive" (2.5.0), only if the client turns it on. On the day of a booking, from
@@ -75,7 +78,10 @@ final class Arrival {
         float[] meters = new float[1];
         Location.distanceBetween(lat, lng, here.getLatitude(), here.getLongitude(), meters);
         double slack = here.hasAccuracy() ? Math.min(Math.max(here.getAccuracy(), 0), 100) : 0;
-        if (meters[0] > radius + slack) return;
+        if (meters[0] > radius + slack) {
+            Log.i(TAG, "Arrival check: " + Math.round(meters[0]) + " m from the shop");
+            return;
+        }
 
         lastTry = now;
         String token = b.optString("token");
@@ -131,52 +137,76 @@ final class Arrival {
         return Integer.parseInt(p[0]) * 60 + Integer.parseInt(p[1]);
     }
 
-    /** A current position (or one under a minute old), waiting at most 25 seconds. Off the main thread. */
+    /**
+     * Where the phone is: a fix from the last 30 seconds if there is one, otherwise the first answer from
+     * GPS, the phone's combined ("fused") location or the network, all asked at once, waiting at most
+     * 30 seconds. Null if none answers. Off the main thread.
+     */
     @SuppressLint("MissingPermission")
     @SuppressWarnings("deprecation")
     private static Location locate(Context c) {
         LocationManager lm = c.getSystemService(LocationManager.class);
         if (lm == null) return null;
         boolean fine = granted(c, Manifest.permission.ACCESS_FINE_LOCATION);
-        String provider = null;
+        List<String> providers = new ArrayList<>();
+        final List<CancellationSignal> cancels = new ArrayList<>();
+        final List<LocationListener> listeners = new ArrayList<>();
         try {
+            if (fine && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) providers.add(LocationManager.GPS_PROVIDER);
             if (Build.VERSION.SDK_INT >= 31 && lm.hasProvider(LocationManager.FUSED_PROVIDER)
-                    && lm.isProviderEnabled(LocationManager.FUSED_PROVIDER)) {
-                provider = LocationManager.FUSED_PROVIDER;
-            } else if (fine && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                provider = LocationManager.GPS_PROVIDER;
-            } else if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                provider = LocationManager.NETWORK_PROVIDER;
+                    && lm.isProviderEnabled(LocationManager.FUSED_PROVIDER)) providers.add(LocationManager.FUSED_PROVIDER);
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) providers.add(LocationManager.NETWORK_PROVIDER);
+            if (providers.isEmpty()) {
+                Log.i(TAG, "Arrival check: location is switched off");
+                return null;
             }
-            if (provider == null) return null; // location is switched off on the phone
 
-            Location last = lm.getLastKnownLocation(provider);
-            if (last != null && System.currentTimeMillis() - last.getTime() < 60_000L) return last;
+            Location recent = null;
+            for (String p : providers) {
+                Location l = lm.getLastKnownLocation(p);
+                if (l != null && System.currentTimeMillis() - l.getTime() < 30_000L && (recent == null || l.getTime() > recent.getTime())) recent = l;
+            }
+            if (recent != null) return recent;
 
             final Location[] found = {null};
             final CountDownLatch done = new CountDownLatch(1);
-            if (Build.VERSION.SDK_INT >= 30) {
-                CancellationSignal cancel = new CancellationSignal();
-                lm.getCurrentLocation(provider, cancel, c.getMainExecutor(), loc -> {
-                    found[0] = loc;
-                    done.countDown();
-                });
-                if (!done.await(25, TimeUnit.SECONDS)) cancel.cancel();
-            } else {
-                // Every method spelled out: older Android has no defaults for the optional ones.
-                LocationListener once = new LocationListener() {
-                    @Override public void onLocationChanged(Location loc) { found[0] = loc; done.countDown(); }
-                    @Override public void onStatusChanged(String p, int s, Bundle extras) {}
-                    @Override public void onProviderEnabled(String p) {}
-                    @Override public void onProviderDisabled(String p) {}
-                };
-                lm.requestSingleUpdate(provider, once, Looper.getMainLooper());
-                if (!done.await(25, TimeUnit.SECONDS)) lm.removeUpdates(once);
+            final AtomicInteger waiting = new AtomicInteger(providers.size());
+            for (String p : providers) {
+                if (Build.VERSION.SDK_INT >= 30) {
+                    CancellationSignal cancel = new CancellationSignal();
+                    cancels.add(cancel);
+                    lm.getCurrentLocation(p, cancel, c.getMainExecutor(), loc -> answer(loc, found, waiting, done));
+                } else {
+                    // Every method spelled out: older Android has no defaults for the optional ones.
+                    LocationListener once = new LocationListener() {
+                        @Override public void onLocationChanged(Location loc) { answer(loc, found, waiting, done); }
+                        @Override public void onStatusChanged(String s, int i, Bundle extras) {}
+                        @Override public void onProviderEnabled(String s) {}
+                        @Override public void onProviderDisabled(String s) {}
+                    };
+                    listeners.add(once);
+                    lm.requestSingleUpdate(p, once, Looper.getMainLooper());
+                }
             }
-            return found[0] != null ? found[0] : last;
+            done.await(30, TimeUnit.SECONDS);
+            if (found[0] == null) Log.i(TAG, "Arrival check: no location yet");
+            return found[0];
         } catch (SecurityException | IllegalArgumentException | InterruptedException e) {
             Log.w(TAG, "No location: " + e.getMessage());
             return null;
+        } finally {
+            for (CancellationSignal cancel : cancels) cancel.cancel();
+            for (LocationListener l : listeners) lm.removeUpdates(l);
+        }
+    }
+
+    /** One provider answered (on the main thread): keep the first position; stop when all are done. */
+    private static void answer(Location loc, Location[] found, AtomicInteger waiting, CountDownLatch done) {
+        if (loc != null) {
+            if (found[0] == null) found[0] = loc;
+            done.countDown();
+        } else if (waiting.decrementAndGet() <= 0) {
+            done.countDown();
         }
     }
 }
