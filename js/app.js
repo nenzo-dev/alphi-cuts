@@ -27,7 +27,7 @@ installGlobalErrorHandlers();
 armAudioUnlock();
 
 const WAITING = ['booked', 'on_deck', 'called', 'checked_in'];
-const SECTION_IDS = ['styles', 'queue', 'book', 'reviews', 'chat', 'contact', 'get-app'];
+const SECTION_IDS = ['styles', 'queue', 'book', 'reviews', 'chat', 'contact', 'map', 'get-app'];
 const DEFAULTS = {
   shop_name: CONFIG.shortName, owner_name: '', tagline: '', price_kwacha: 50, rating: 5, rating_count: 0,
   open_time: '09:00', close_time: '20:00', slot_minutes: 30, booking_days_ahead: 7, reminder_minutes: 10,
@@ -106,6 +106,9 @@ function renderConfig() {
   });
 }
 
+const PHONE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2Z"/></svg>';
+const WHATSAPP_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2A9.8 9.8 0 0 0 3.6 17l-1.4 4.8 4.9-1.3A9.8 9.8 0 1 0 12 2.2Zm0 1.8a8 8 0 1 1-4.2 14.8l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0 1 12 4Z"/><path d="M9.1 7.3c-.2-.4-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3.9 2.5 1 2.7.2.2 1.8 2.8 4.4 3.8 2.2.9 2.6.7 3.1.6.5 0 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2l-.4-.3-1.8-.9c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.6 6.6 0 0 1-3.3-2.9c-.2-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-2Z"/></svg>';
+
 function renderContact() {
   const c = cfg;
   $('#ct-address').textContent = c.address_line || '';
@@ -116,17 +119,34 @@ function renderContact() {
 
   const links = [];
   const tel = String(c.phone || '').replace(/[^\d+]/g, '');
-  if (tel) links.push(`<a class="btn btn-ghost" href="tel:${esc(tel)}">Call ${esc(c.phone)}</a>`);
+  if (tel) {
+    links.push(`<a class="contact-btn ct-call" href="tel:${esc(tel)}"><span class="ct-icon">${PHONE_ICON}</span><span class="ct-text"><b>Call</b><small>${esc(c.phone)}</small></span></a>`);
+  }
   const wa = String(c.whatsapp || '').replace(/\D/g, '');
-  if (wa) links.push(`<a class="btn btn-ghost" href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer">WhatsApp</a>`);
+  if (wa) {
+    links.push(`<a class="contact-btn ct-wa" href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer"><span class="ct-icon">${WHATSAPP_ICON}</span><span class="ct-text"><b>WhatsApp</b><small>${esc(c.whatsapp)}</small></span></a>`);
+  }
   if (/^https:\/\//i.test(c.facebook || '')) links.push(`<a class="btn btn-ghost" href="${esc(c.facebook)}" target="_blank" rel="noopener noreferrer">Facebook</a>`);
   if (/^https:\/\//i.test(c.instagram || '')) links.push(`<a class="btn btn-ghost" href="${esc(c.instagram)}" target="_blank" rel="noopener noreferrer">Instagram</a>`);
-  // The map opens at the exact spot once the owner has set the shop's location, else at the address.
-  const mapQuery = c.shop_lat != null && c.shop_lng != null ? `${Number(c.shop_lat)},${Number(c.shop_lng)}` : c.address_line;
-  if (mapQuery) {
-    links.push(`<a class="btn btn-ghost" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(mapQuery)}" target="_blank" rel="noopener noreferrer">Open in Maps</a>`);
-  }
   $('#ct-contacts').innerHTML = links.join('') || '<p class="muted">Contact details coming soon.</p>';
+
+  // The picture and the Open button go to the owner's map link (Public page tab), else to the
+  // shop's location if it's set, else to a search for the address.
+  const link = t('map_link').trim();
+  let url = /^https:\/\/\S+$/i.test(link) ? link : '';
+  if (!url) {
+    const query = c.shop_lat != null && c.shop_lng != null ? `${Number(c.shop_lat)},${Number(c.shop_lng)}` : c.address_line;
+    if (query) url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  }
+  const open = $('#map-open');
+  open.hidden = !url;
+  if (url) {
+    open.href = url;
+    $('#map').href = url;
+  } else {
+    $('#map').removeAttribute('href');
+  }
+  $('#map').setAttribute('aria-label', `Open the map to ${c.shop_name}`);
 }
 
 // ---------------------------------------------------------------- slots for a day (shared, briefly cached)
@@ -399,11 +419,28 @@ async function refreshSlotOptions() {
   sel.disabled = false;
 }
 
+// One booking at a time (the database checks this too, by phone number and by device): while this
+// device holds a booking that's still waiting or in the chair, the form says so instead.
+function heldBooking() {
+  const today = todayISO();
+  return myRows.find((r) => (WAITING.includes(r.status) || r.status === 'in_chair') && r.booking_date >= today) || null;
+}
+
+function updateBookingLimit() {
+  const held = heldBooking();
+  const note = $('#bk-held');
+  note.hidden = !held;
+  if (held) note.querySelector('p').textContent = t('book_one_only', { time: fmtTime(held.slot_time), date: fmtDate(held.booking_date) });
+  $('#booking-form').classList.toggle('is-held', !!held);
+  $('#bk-submit').disabled = !!held;
+}
+
 async function submitBooking(e) {
   e.preventDefault();
   const msg = $('#bk-msg');
   showMsg(msg, '');
   if (!cfg) { showMsg(msg, GENERIC_ERROR, 'error'); return; }
+  if (heldBooking()) { updateBookingLimit(); return; }
   const date = $('#bk-date').value;
   const slot = $('#bk-slot').value;
   const name = $('#bk-name').value.trim();
@@ -440,6 +477,7 @@ async function submitBooking(e) {
       refreshSlotOptions();
     }
   });
+  updateBookingLimit();
 }
 
 // ---------------------------------------------------------------- my bookings (held on this device)
@@ -477,6 +515,12 @@ async function refreshMyBookings() {
     const drop = new Set(tokens.filter((tk) => !keepSet.has(tk)));
     if (drop.size) setBookingTokens(bookingTokens().filter((tk) => !drop.has(tk)));
 
+    const wasRequested = new Set(myRows.filter((r) => r.payment_status === 'requested').map((r) => r.client_token));
+    for (const r of keep) {
+      if (!wasRequested.has(r.client_token) || r.payment_status !== 'none' || !r.payment_expired_at) continue;
+      toast(t('pay_expired'));
+      if (document.hidden && !android) notify(cfg.shop_name, t('pay_expired'), { tag: `pay-${r.client_token}` });
+    }
     myRows = sortBookings(keep);
     renderMyBookings();
     setAlarms(keep);
@@ -539,9 +583,11 @@ function paymentHtml(b) {
   const closed = ['no_show', 'cancelled'].includes(b.status);
   switch (b.payment_status) {
     case 'none':
-      return closed || b.status === 'done' ? '' : `<button type="button" class="link-btn" data-act="pay" data-token="${token}">Pay online instead</button>`;
+      // A request not approved by the slot time is cleared then, and can't be made after that.
+      if (b.payment_expired_at && !closed && b.status !== 'done') return `<p class="small pay-expired">${esc(t('pay_expired'))}</p>`;
+      return closed || b.status === 'done' || startsIn(b) <= 0 ? '' : `<button type="button" class="link-btn" data-act="pay" data-token="${token}">Pay online instead</button>`;
     case 'requested':
-      return `<p class="small muted">Waiting for ${esc(ownerFirst())} to approve online payment.</p>`;
+      return `<p class="small muted">${esc(t('pay_waiting', { time: fmtTime(b.slot_time) }))}</p>`;
     case 'approved': {
       const p = paymentDetails.get(b.client_token);
       if (!p) return `<div class="payment-box" data-pay-details="${token}"><span class="muted small">Loading payment details&hellip;</span></div>`;
@@ -660,6 +706,7 @@ async function setArrival(on) {
 
 function renderMyBookings() {
   const body = $('#my-booking-body');
+  updateBookingLimit();
   if (!myRows.length) {
     body.innerHTML = `<p class="muted">${esc(t('my_empty'))}</p>`;
     return;

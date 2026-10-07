@@ -1,4 +1,4 @@
--- AlPhi Cuts database schema (v2.7.0).
+-- AlPhi Cuts database schema (v2.8.0).
 --
 -- Row-level security is the real access control. Anything the public can do goes through a
 -- SECURITY DEFINER function below, which checks its inputs and only touches what it should: a
@@ -205,6 +205,7 @@ create table public.bookings (
   payment_requested_at timestamptz,
   payment_approved_at timestamptz,
   paid_at timestamptz,
+  payment_expired_at timestamptz,   -- a request not approved by the slot time was cleared then
   created_at timestamptz not null default now()
 );
 create unique index bookings_slot_taken
@@ -319,6 +320,7 @@ declare
   v_name text := btrim(coalesce(p_name, ''));
   v_phone text := btrim(coalesce(p_phone, ''));
   v_digits text := regexp_replace(coalesce(p_phone, ''), '\D', '', 'g');
+  v_device text := case when public.valid_token(p_device) then p_device end;
   v_start int;
 begin
   select * into c from public.site_config where id = 1;
@@ -358,22 +360,35 @@ begin
     raise exception 'That style name is too long.';
   end if;
 
-  -- Bookings for the same day go through one at a time, so two people can't take overlapping slots.
+  -- Bookings go through one at a time, so one person can't take two slots by booking twice at once,
+  -- and two people can't take overlapping slots (walk-ins take the same lock for the day).
+  perform pg_advisory_xact_lock(hashtext('book_slot'));
   perform pg_advisory_xact_lock(hashtext('book_slot:' || p_date::text));
 
-  if (select count(*) from public.bookings
-      where booking_date = p_date
-        and status in ('booked', 'on_deck', 'called', 'checked_in')
-        and right(regexp_replace(client_phone, '\D', '', 'g'), 9) = right(v_digits, 9)) >= 2 then
-    raise exception 'This phone number already has 2 bookings that day.';
+  -- One booking at a time: the same phone number, or the same device, can't hold two.
+  if exists (
+    select 1 from public.bookings
+    where booking_date >= public.shop_today()
+      and status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair')
+      and right(regexp_replace(client_phone, '\D', '', 'g'), 9) = right(v_digits, 9)
+  ) then
+    raise exception 'This phone number already has a booking. You can only book one slot at a time.';
   end if;
+  if v_device is not null and exists (
+    select 1 from public.bookings
+    where booking_date >= public.shop_today()
+      and status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair')
+      and device_token = v_device
+  ) then
+    raise exception 'You already have a booking. You can only book one slot at a time, so cancel it first to pick another time.';
+  end if;
+
   if public.slot_is_taken(p_date, p_slot, c.slot_minutes) then
     raise exception 'That time was just taken. Please pick another.';
   end if;
 
   insert into public.bookings (booking_date, slot_time, client_name, client_phone, style_choice, device_token)
-  values (p_date, p_slot, v_name, v_phone, nullif(btrim(coalesce(p_style, '')), ''),
-          case when public.valid_token(p_device) then p_device end)
+  values (p_date, p_slot, v_name, v_phone, nullif(btrim(coalesce(p_style, '')), ''), v_device)
   returning client_token into v_token;
   return v_token;
 exception
@@ -1121,11 +1136,20 @@ grant execute on function public.admin_get_payment_details() to authenticated;
 create or replace function public.request_online_payment(p_token text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  update public.bookings set payment_status = 'requested', payment_requested_at = now()
-  where client_token = p_token and payment_status = 'none';
-  if not found then
-    raise exception 'Online payment can''t be requested for this booking right now.';
+  update public.bookings
+  set payment_status = 'requested', payment_requested_at = now(), payment_expired_at = null
+  where client_token = p_token
+    and payment_status = 'none'
+    and status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair')
+    and booking_date + slot_time > public.shop_now();
+  if found then return; end if;
+  if exists (
+    select 1 from public.bookings
+    where client_token = p_token and payment_status = 'none' and booking_date + slot_time <= public.shop_now()
+  ) then
+    raise exception 'Your slot has already started, so you can''t ask to pay online now. Please pay at the shop.';
   end if;
+  raise exception 'Online payment can''t be requested for this booking right now.';
 end;
 $$;
 grant execute on function public.request_online_payment(text) to anon, authenticated;
@@ -1575,6 +1599,42 @@ begin
 end;
 $$;
 revoke all on function public.push_due() from public, anon, authenticated;
+
+-- Every minute: requests still waiting for approval when the slot starts are cleared, and the client
+-- is told (if they turned notifications on; the booking on the page says so too).
+create or replace function public.expire_payment_requests()
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  b record;
+  v_count int := 0;
+begin
+  for b in
+    update public.bookings
+    set payment_status = 'none', payment_requested_at = null, payment_expired_at = now()
+    where payment_status = 'requested' and booking_date + slot_time <= public.shop_now()
+    returning id, client_token, booking_date, slot_time, status
+  loop
+    v_count := v_count + 1;
+    if b.booking_date = public.shop_today() and b.status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair') then
+      perform public.push_queue('booking', b.client_token, 'Online payment request cleared',
+        public.push_text('pay_expired', 'Your request to pay online wasn''t approved before your slot, so it was cleared. Please pay at the shop.', b.slot_time),
+        './#book', 'pay-' || b.client_token, false, 'payexp:' || b.id);
+    end if;
+  end loop;
+  return v_count;
+end;
+$$;
+revoke all on function public.expire_payment_requests() from public, anon, authenticated;
+
+do $cron$
+begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'alphicuts-payments';
+  perform cron.schedule('alphicuts-payments', '* * * * *', 'select public.expire_payment_requests()');
+exception when others then
+  raise notice 'pg_cron is not available (%); payment requests are not cleared automatically.', sqlerrm;
+end
+$cron$;
 
 -- ============================================================ FOR THE PUSH-SEND FUNCTION ONLY
 create or replace function public.push_keys_get()

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.8.0 (2026-10-07)
+
+Needs `supabase/migrations/14_one_booking_and_payment_expiry.sql` run on the existing database.
+
+- One booking at a time per person. A second booking is refused while the same phone number, or the
+  same device, already has one waiting or in the chair. Cancelling it, or the cut being done, frees
+  them to book again. On a device that already has a booking, the form says so and points to
+  "My booking" instead of showing the booking fields.
+- A request to pay online that isn't approved by the time the slot starts is cleared. The client
+  gets a notification (if they turned them on), a message on the page if it's open, and a note on
+  their booking. Online payment can't be asked for once the slot has started. While a request
+  waits, the booking says when it will be cleared.
+- Find us: Call and WhatsApp buttons with icons, and a map picture with a glowing marker where the
+  shop is. The picture and the "Open" button below it open Google Maps at the shop.
+- In the owner panel (Public page): the map link, the button and marker wording, the new booking
+  and payment messages, and an option to hide the map picture.
+- The terms explain the one-booking rule and when payment requests are cleared; the privacy policy
+  lists the new notification.
+
 ## 2.7.0 (2026-10-07)
 
 Needs `supabase/migrations/13_push_notifications.sql` run on the existing database, and the

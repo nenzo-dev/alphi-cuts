@@ -25,6 +25,7 @@ export const SECTIONS = [
   { id: 'reviews', label: 'Reviews' },
   { id: 'chat', label: 'Chat' },
   { id: 'contact', label: 'Find us' },
+  { id: 'map', label: 'Map picture in Find us (the Open button stays)' },
   { id: 'get-app', label: 'Get the app' },
 ];
 
@@ -76,9 +77,11 @@ export const TEXT_GROUPS = [
       book_button: ['Button', 'Book this slot'],
       book_done: ['After booking', "You're booked for {time}, {date}. Please be on time: if you're not here when it's your turn, the slot may go to the next person."],
       my_title: ['"My booking" heading', 'My booking'],
+      book_one_only: ['Already has a booking', 'You already have a booking for {time}, {date}. You can only book one slot at a time. To pick another time, cancel that one first.'],
       my_empty: ['No booking yet', 'No booking on this device yet.'],
       my_alert_note: ['Alert note (website)', "Turn on notifications and we'll tell you when it's your turn, even with this site closed. You can also add the booking to your calendar."],
       my_alert_note_app: ['Alert note (Android app)', "The app rings when your slot starts, even when it's closed."],
+      pay_waiting: ['Online payment waiting for approval', "Waiting for {owner_first} to approve online payment. If it isn't approved by {time}, the request is cleared and you pay at the shop."],
     },
   },
   {
@@ -90,6 +93,7 @@ export const TEXT_GROUPS = [
       alert_now: ['Slot has started', "It's your turn at {shop}. Please go to the chair now."],
       alert_arrived: ['Checked in on arrival', "You're checked in at {shop}. {owner_first} can see you're here."],
       alert_next_here: ['Next, already at the shop', "You're next at {shop}. Please don't leave. {owner_first} will call you to the chair shortly."],
+      pay_expired: ['Online payment request cleared', "Your request to pay online wasn't approved before your slot, so it was cleared. Please pay at the shop."],
     },
   },
   {
@@ -126,6 +130,9 @@ export const TEXT_GROUPS = [
     title: 'Find us, app and footer',
     keys: {
       contact_title: ['"Find us" heading', 'Find us'],
+      map_pin: ['Label on the green dot', "We're here"],
+      map_button: ['Button under the map', 'Open'],
+      map_link: ['Map link for the button (a Google Maps link to the shop)', 'https://www.google.com/maps/search/?api=1&query=-15.35805,28.47417'],
       app_title: ['App heading', 'Get the app'],
       app_intro: ['App intro', "Get an alert on your phone when it's your turn."],
       app_android_text: ['Android text', 'The Android app rings when your slot starts, even when the app is closed.'],

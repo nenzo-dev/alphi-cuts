@@ -121,6 +121,10 @@
     </div>
     <div class="grid-2">
       <form class="card" id="booking-form" novalidate>
+        <div id="bk-held" class="held-note" hidden>
+          <p></p>
+          <a class="btn btn-ghost btn-sm" href="#my-booking-card">See my booking</a>
+        </div>
         <div id="bk-style-chip" class="style-chip" hidden></div>
         <div class="field-row">
           <div>
@@ -205,9 +209,19 @@
         <p id="ct-address" class="ct-address"></p>
         <p id="ct-directions" class="muted"></p>
         <p id="ct-about" hidden></p>
-      </div>
-      <div class="card">
         <div class="contact-grid" id="ct-contacts"></div>
+      </div>
+      <div class="card map-card">
+        <a class="map-pic" id="map" target="_blank" rel="noopener noreferrer">
+          <img src="img/map.webp" width="553" height="381" loading="lazy" decoding="async"
+            alt="Satellite map of the area around the shop. The green dot marks the shop, on the road between Silver Rest Secondary School and Kriskon Apartments.">
+          <span class="map-pin" aria-hidden="true"><span class="map-tag" data-c="map_pin">We're here</span></span>
+          <span class="map-credit">Imagery: Google</span>
+        </a>
+        <a class="btn btn-gold btn-block btn-lg map-open" id="map-open" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>
+          <span data-c="map_button">Open</span>
+        </a>
       </div>
     </div>
   </div>
@@ -264,7 +278,7 @@
       <a href="disclaimer">Disclaimer</a>
       <a href="admin">Owner login</a>
     </nav>
-    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.7.0</span></p>
+    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.8.0</span></p>
   </div>
 </footer>
 

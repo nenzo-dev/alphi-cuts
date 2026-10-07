@@ -36,7 +36,7 @@ This is off until you turn on "Check me in when I arrive" on your booking. Then,
 
 ## Notifications
 
-These are off until you turn them on with the bell at the top of the site. Then your browser gives us a push address for this device from its push service (Google, Mozilla, Apple or Microsoft, depending on your browser), and we keep it with the private codes of the bookings made on that device and its chat code. We use it to tell you when your turn is coming up, when it's your turn, when the shop replies to you, if your booking is cancelled or your online payment is approved, and, if you ask, when {owner_first} is free that day.
+These are off until you turn them on with the bell at the top of the site. Then your browser gives us a push address for this device from its push service (Google, Mozilla, Apple or Microsoft, depending on your browser), and we keep it with the private codes of the bookings made on that device and its chat code. We use it to tell you when your turn is coming up, when it's your turn, when the shop replies to you, if your booking is cancelled, if your online payment is approved or your request to pay online is cleared, and, if you ask, when {owner_first} is free that day.
 
 - The notifications are encrypted so that only your device can read them. The push service only passes them on.
 - The push address doesn't contain your name or number.
@@ -96,6 +96,7 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 ## Bookings
 
 - A booking holds one {slot}-minute slot for one person.
+- You can have one booking at a time, checked by phone number and by device. To change the time, cancel your booking and book again.
 - Please arrive a few minutes early. If you're not at the shop when it's your turn, your slot may go to the next person and be marked as a no-show.
 - Once you're checked in, please stay at the shop. When your slot starts and the chair is free, you may be marked as in the chair automatically.
 - Times are a guide. A cut can run a little early or late, especially if the person before you needs more time.
@@ -108,6 +109,7 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 - Prices are in Zambian kwacha and may change.
 - You can always pay at the shop.
 - Online payment is only possible once {owner_first} approves it for your booking. Only send money to the details shown on your own booking after approval.
+- Ask to pay online before your slot starts. A request that isn't approved by the time your slot starts is cleared, and you pay at the shop.
 - Refunds for online payments are handled directly with the shop.
 
 ## Reviews, chat and photos
