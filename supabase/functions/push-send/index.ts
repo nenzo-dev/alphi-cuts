@@ -83,14 +83,25 @@ function env(name) {
   return typeof Deno !== 'undefined' ? Deno.env.get(name) : undefined;
 }
 
+// The project's server key: the classic service_role key, or one of the newer secret keys.
+function serverKey() {
+  const legacy = env('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) return legacy;
+  try {
+    const keys = JSON.parse(env('SUPABASE_SECRET_KEYS') || '{}');
+    return keys.default || Object.values(keys)[0];
+  } catch {
+    return undefined;
+  }
+}
+
 async function rpc(name, args = {}) {
   const url = env('SUPABASE_URL');
-  const key = env('SUPABASE_SERVICE_ROLE_KEY');
-  const res = await fetch(`${url}/rest/v1/rpc/${name}`, {
-    method: 'POST',
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(args),
-  });
+  const key = serverKey();
+  // A newer secret key (sb_secret_...) goes in the apikey header only; a classic key is also a JWT.
+  const headers = { apikey: key, 'Content-Type': 'application/json' };
+  if (!String(key).startsWith('sb_')) headers.Authorization = `Bearer ${key}`;
+  const res = await fetch(`${url}/rest/v1/rpc/${name}`, { method: 'POST', headers, body: JSON.stringify(args) });
   if (!res.ok) throw new Error(`${name} answered ${res.status}: ${await res.text()}`);
   const text = await res.text();
   return text ? JSON.parse(text) : null;
