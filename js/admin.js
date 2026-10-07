@@ -270,7 +270,7 @@ async function showAdmin() {
 const OWNER_NOTIFY_TEXT = {
   on: "Notifications are on for this phone: new bookings, messages, check-ins, cancellations, payment requests and reviews.",
   off: 'Get a notification for new bookings, messages, check-ins, cancellations, payment requests and reviews, even with this panel closed.',
-  blocked: 'Notifications are blocked for this site. Allow them in the browser's site settings (the lock icon next to the address), then reload this page.',
+  blocked: "Notifications are blocked for this site. Allow them in the browser's site settings (the lock icon next to the address), then reload this page.",
   'ios-install': 'On iPhone, add this page to your Home Screen (Share, then Add to Home Screen), open it from there and turn notifications on.',
   unsupported: "This browser can't show notifications. Open the owner panel in Chrome, Edge, Firefox or Safari.",
   app: "Open the owner panel in your phone's browser (Chrome) to get notifications there.",

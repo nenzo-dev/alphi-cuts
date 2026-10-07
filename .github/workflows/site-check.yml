@@ -1,0 +1,40 @@
+name: Site check
+
+# Every script on the site must at least parse. One that doesn't stops that whole page from working
+# (in 2.7.0 a stray apostrophe stopped the owner panel's sign-in), so this fails loudly on a push
+# that would break a page.
+on:
+  push:
+    branches: [master]
+    paths:
+      - '**.js'
+      - '**.html'
+      - '.github/workflows/site-check.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Every script parses
+        run: |
+          status=0
+          for f in $(git ls-files '*.js' ':!:android/**'); do
+            cp "$f" /tmp/check.mjs
+            if ! node --check /tmp/check.mjs; then
+              echo "::error file=$f::$f does not parse"
+              status=1
+            fi
+          done
+          exit $status

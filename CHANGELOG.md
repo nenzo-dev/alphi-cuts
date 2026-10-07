@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.1 (2026-10-07)
+
+- Fixed: the owner panel couldn't sign in since 2.7.0. An apostrophe in one of its messages stopped
+  the panel's script from loading, so the sign-in button did nothing.
+- A check on GitHub now makes sure every script on the site parses, on each push.
+
 ## 2.8.0 (2026-10-07)
 
 Needs `supabase/migrations/14_one_booking_and_payment_expiry.sql` run on the existing database.

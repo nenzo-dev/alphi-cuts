@@ -2,7 +2,7 @@
 // notifications when they arrive (even with the site closed, 2.7.0), and opens the right page when
 // one is tapped.
 // Pages and code are network-first so updates show up straight away; images are cache-first.
-const VERSION = '2.8.0';
+const VERSION = '2.8.1';
 const CACHE = `alphicuts-${VERSION}`;
 const CORE = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/logo-96.webp', 'icons/logo-512.webp',
