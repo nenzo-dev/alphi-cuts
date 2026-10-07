@@ -66,8 +66,10 @@ adb logcat -c
 # ---------------------------------------------------------------- 1. release build opens the site
 RELEASE=$(ls "$APKS"/release/*.apk 2>/dev/null | head -1)
 if [ -n "$RELEASE" ] && adb install -r "$RELEASE"; then pass "release APK installs"; else fail "release APK did not install"; fi
-adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
-adb shell am start -W -n "$PKG/.MainActivity"
+# adb calls that wait on the emulator get a time limit: on 2026-10-07 a launch hung until the job's
+# 35-minute limit cancelled the whole run.
+timeout 60 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
+timeout 120 adb shell am start -W -n "$PKG/.MainActivity"
 # The first load on a fresh emulator can be slow: wait for the site (or the offline page).
 release_loaded() { adb logcat -d -s AlPhiCuts:V | grep -qE "Loaded https://alphi-cuts.pages.dev/|offline page"; }
 wait_for 90 release_loaded
@@ -86,15 +88,15 @@ adb shell am force-stop "$PKG"   # frees its memory for the rest of the test
 # ---------------------------------------------------------------- 2. alarm rings with the app closed
 DEBUG=$(ls "$APKS"/debug/*.apk 2>/dev/null | head -1)
 if [ -n "$DEBUG" ] && adb install -r "$DEBUG"; then pass "debug APK installs"; else fail "debug APK did not install"; fi
-adb shell pm grant "$DBG" android.permission.POST_NOTIFICATIONS
+timeout 60 adb shell pm grant "$DBG" android.permission.POST_NOTIFICATIONS
 adb shell appops set "$DBG" USE_FULL_SCREEN_INTENT allow
 adb shell dumpsys deviceidle whitelist +"$DBG" >/dev/null   # same as "allow background use"
 # "Check me in when I arrive": location allowed all the time, and the phone starts 2 km from the test shop.
-for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION; do adb shell pm grant "$DBG" android.permission.$p; done
+for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION; do timeout 60 adb shell pm grant "$DBG" android.permission.$p; done
 adb shell cmd location set-location-enabled true >/dev/null 2>&1
 adb emu geo fix 28.70 -15.33 >/dev/null 2>&1
 
-adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/bridge-test.html
+timeout 120 adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/bridge-test.html
 T0=$SECONDS
 sleep 6
 shot 02-bridge-test
@@ -174,7 +176,7 @@ adb shell am force-stop "$DBG"
 adb shell appops set "$DBG" REQUEST_INSTALL_PACKAGES deny
 before_update=$(adb shell dumpsys package "$DBG" | grep -m1 lastUpdateTime | tr -d '\r')
 adb logcat -c
-adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/update-test.html \
+timeout 120 adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/update-test.html \
   --es updateBase http://10.0.2.2:8000/ --ez autoUpdate true >/dev/null
 if wait_for 40 screen_has "Allow updates from AlPhi Cuts"; then pass "a blocked install says why"; else fail "no explanation when installs are blocked"; fi
 shot 05-update-blocked

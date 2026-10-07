@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.10.1 (2026-10-07)
+
+- Photos and icons stay saved on the phone across releases, so a new version no longer downloads
+  them all again.
+- The Android app's emulator test puts a time limit on launching the app (a launch that hung let
+  the 2.9.0 run run out of time, so app 1.4.0 wasn't published then).
+
 ## 2.10.0 (2026-10-07)
 
 Faster, especially on slow connections and older phones. No database change.

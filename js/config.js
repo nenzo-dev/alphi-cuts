@@ -1,6 +1,6 @@
 // Public settings. The Supabase anon key is meant to be public: the database itself decides what
 // each caller may do (row-level security and the functions in supabase/schema.sql).
-export const VERSION = '2.10.0';
+export const VERSION = '2.10.1';
 
 export const CONFIG = {
   shortName: 'AlPhi Cuts',
