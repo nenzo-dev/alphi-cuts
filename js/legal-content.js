@@ -1,7 +1,7 @@
 // Default wording for the privacy policy, terms of use and disclaimer. The owner can replace any
 // of them from the panel (Legal pages tab). {shop}, {owner}, {owner_first} and {slot} are filled in
 // from the shop's settings.
-export const LEGAL_UPDATED = '2 October 2026';
+export const LEGAL_UPDATED = '7 October 2026';
 
 export const LEGAL_DOCS = {
   privacy: {
@@ -20,6 +20,7 @@ This page explains what {shop} collects through this website, why we collect it,
 - **Reviews:** the name you give (optional), your rating and your comment.
 - **Online payments:** whether you asked to pay online and whether the payment was approved and received. We never ask for card numbers or mobile money PINs. You pay us directly.
 - **Arriving at the shop:** only if you turn on "Check me in when I arrive" (see below).
+- **Notifications:** only if you turn them on (see below).
 - **On your device:** the site keeps a few random codes in your browser so it can show your own booking and chat. They don't contain your name or number. Clearing your browser data removes them, but you'll no longer see your booking on that device.
 
 We don't use advertising or tracking cookies, and we never sell your information.
@@ -32,6 +33,14 @@ This is off until you turn on "Check me in when I arrive" on your booking. Then,
 - Your location isn't used on any other day, or outside those hours.
 - In the Android app this works even when the app is closed, if you allow location "all the time". On a website or iPhone it only works while the page is open.
 - You can turn it off on your booking at any time, or turn off location for the app or the site in your phone's settings.
+
+## Notifications
+
+These are off until you turn them on with the bell at the top of the site. Then your browser gives us a push address for this device from its push service (Google, Mozilla, Apple or Microsoft, depending on your browser), and we keep it with the private codes of the bookings made on that device and its chat code. We use it to tell you when your turn is coming up, when it's your turn, when the shop replies to you, if your booking is cancelled or your online payment is approved, and, if you ask, when {owner_first} is free that day.
+
+- The notifications are encrypted so that only your device can read them. The push service only passes them on.
+- The push address doesn't contain your name or number.
+- To stop them, use "Turn off on this device" in the bell's panel, or block notifications for this site in your browser or phone settings. We delete the push address when you turn them off, when the push service tells us it no longer works, or {keep_days} days after you last opened the site.
 
 ## The Android app
 
@@ -147,7 +156,7 @@ The queue and times on this site depend on the shop keeping them up to date, so 
 
 Checking in when you arrive depends on your phone's location, which can be off by tens of metres, especially indoors or with a weak signal. If you aren't checked in when you get to the shop, tap "I'm here".
 
-The Android app rings when your slot starts even when the app is closed, as long as you allow its notifications, alarms and background use. Some phones' battery savers can still stop it, and the sound follows your phone's alarm volume. On iPhone and in a web browser, alerts only work while this site is open; adding your booking to your calendar is the most reliable reminder there. Please keep an eye on the time yourself.
+The Android app rings when your slot starts even when the app is closed, as long as you allow its notifications, alarms and background use. Some phones' battery savers can still stop it, and the sound follows your phone's alarm volume. In a web browser, and on iPhone once the site is added to the Home Screen, notifications arrive even when the site is closed, if you turn them on and allow them. They depend on your phone's settings and connection, and can arrive late or not at all (for example with battery saver or Do Not Disturb on). Adding your booking to your calendar is a good backup. Please keep an eye on the time yourself.
 
 ## Payments
 

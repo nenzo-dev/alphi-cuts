@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.7.0 (2026-10-07)
+
+Needs `supabase/migrations/13_push_notifications.sql` run on the existing database, and the
+`push-send` Edge Function deployed (supabase/functions/push-send/index.ts, Edge Functions > Deploy a
+new function > Via editor). The function makes its own signing keys the first time it runs.
+
+- Notifications that arrive even when the site is closed, on Android phones and computers (Chrome,
+  Edge, Firefox) and on iPhone once the site is added to the Home Screen. Clients hear about the
+  heads-up before their slot, being 2 away, being called next, their turn starting, being next once
+  checked in, replies from the barber, a cancellation by the shop, an approved online payment and,
+  if they ask, when the barber is free that day.
+- A bell at the top of every phone and computer screen, with a glowing dot while notifications are
+  off. It opens a panel that says what you get, with one button to turn them on, a test button, a
+  "free today" option and a way to turn them off. iPhone users get step-by-step Home Screen
+  instructions, and anyone who blocked notifications is shown how to allow them again.
+- A prompt at the bottom of the home page (once a week until it's dismissed) and straight after
+  booking. "My booking" has a gold "Turn on notifications" button.
+- "Tell me when the barber is free" now works with the site closed.
+- The owner panel has "Notifications on this phone" at the top of Today's queue: new bookings,
+  messages, check-ins, cancellations, online payment requests, style requests and reviews.
+- The notification wording is editable in the owner panel (Public page, Notifications), and the
+  heads-up, turn and "next" messages use the same wording as the alarms.
+- The privacy policy explains notifications; the disclaimer no longer says browser alerts only work
+  while the site is open.
+
 ## 2.6.2 (2026-10-07)
 
 - A page left open in the background now updates itself there too, so it is already on the newest

@@ -11,6 +11,7 @@ import { TEXT_GROUPS, DEFAULT_TEXT, TEXT_LABELS, OPTIONAL_TEXT, SECTIONS, PLACEH
 import { LEGAL_DOCS } from './legal-content.js';
 import { prepareImage } from './lib/image.js';
 import { armAudioUnlock, chime } from './lib/ringtone.js';
+import { ownerPushState, ownerTurnOn, ownerTurnOff, sendTestPush } from './lib/push.js';
 
 installGlobalErrorHandlers();
 armAudioUnlock();
@@ -250,6 +251,7 @@ async function showAdmin() {
   $('#login-screen').hidden = true;
   $('#admin-shell').hidden = false;
   try { await loadSite(); } catch (err) { report(err); }
+  renderOwnerNotify().catch(() => {});
   // Clear cancelled and old records (also runs every 10 minutes on the database when it can).
   try { await rpc('admin_run_cleanup'); } catch { /* older database: nothing to run */ }
   purgeOldStyleRequests().catch(() => {});
@@ -262,6 +264,49 @@ async function showAdmin() {
     if (activeTab === 'queue') loadQueueTab().catch(() => {});
     if (activeTab === 'chat') loadChatTab().catch(() => {});
   }, 15000));
+}
+
+// ---------------------------------------------------------------- the owner's notifications (2.7.0)
+const OWNER_NOTIFY_TEXT = {
+  on: "Notifications are on for this phone: new bookings, messages, check-ins, cancellations, payment requests and reviews.",
+  off: 'Get a notification for new bookings, messages, check-ins, cancellations, payment requests and reviews, even with this panel closed.',
+  blocked: 'Notifications are blocked for this site. Allow them in the browser's site settings (the lock icon next to the address), then reload this page.',
+  'ios-install': 'On iPhone, add this page to your Home Screen (Share, then Add to Home Screen), open it from there and turn notifications on.',
+  unsupported: "This browser can't show notifications. Open the owner panel in Chrome, Edge, Firefox or Safari.",
+  app: "Open the owner panel in your phone's browser (Chrome) to get notifications there.",
+};
+
+let ownerNotifyWired = false;
+async function renderOwnerNotify() {
+  const card = $('#owner-notify');
+  if (!card) return;
+  const state = await ownerPushState();
+  if (state === 'unavailable') { card.hidden = true; return; }
+  card.hidden = false;
+  card.dataset.state = state;
+  $('#on-text').textContent = OWNER_NOTIFY_TEXT[state] || OWNER_NOTIFY_TEXT.unsupported;
+  $('#on-btn').hidden = state !== 'off';
+  $('#on-test').hidden = state !== 'on';
+  $('#on-off').hidden = state !== 'on';
+  if (ownerNotifyWired) return;
+  ownerNotifyWired = true;
+  $('#on-btn').addEventListener('click', () => withBusy($('#on-btn'), async () => {
+    try {
+      const next = await ownerTurnOn();
+      if (next === 'on') toast("Notifications are on. You'll hear about new bookings and messages.");
+    } catch (err) { report(err); }
+    await renderOwnerNotify();
+  }));
+  $('#on-test').addEventListener('click', async () => {
+    const btn = $('#on-test');
+    btn.disabled = true;
+    try { await sendTestPush(); toast('Sent. It should arrive in a few seconds.'); } catch (err) { report(err); }
+    setTimeout(() => { btn.disabled = false; }, 60000);
+  });
+  $('#on-off').addEventListener('click', async () => {
+    try { await ownerTurnOff(); } catch (err) { report(err); }
+    await renderOwnerNotify();
+  });
 }
 
 let shellWired = false;

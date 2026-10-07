@@ -89,6 +89,20 @@
 
     <section data-panel="queue">
       <h2>Today's queue</h2>
+      <div class="card owner-notify" id="owner-notify" hidden>
+        <div class="on-row">
+          <span class="on-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg></span>
+          <div>
+            <h3>Notifications on this phone</h3>
+            <p class="small muted" id="on-text">Get a notification for new bookings, messages, check-ins, cancellations, payment requests and reviews, even with this panel closed.</p>
+          </div>
+        </div>
+        <div class="on-actions">
+          <button class="btn btn-gold btn-sm" type="button" id="on-btn">Turn on notifications</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="on-test" hidden>Send a test</button>
+          <button class="link-btn small" type="button" id="on-off" hidden>Turn off on this phone</button>
+        </div>
+      </div>
       <div class="stat-row" id="queue-stats"></div>
       <div class="card">
         <form class="inline-form" id="walkin-form" novalidate>

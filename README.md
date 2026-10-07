@@ -55,7 +55,11 @@ APK whose certificate doesn't match `RELEASE_CERT_SHA256`. To release a new vers
 1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.
 2. Put the project URL and anon key in `js/config.js`, and set `siteUrl` to where the site will live.
 3. Open `/admin.html` and use "Set up the owner account". The first account created becomes the owner.
-4. Deploy: in Cloudflare, Workers & Pages → Create → Pages → Connect to Git, pick this repository,
+4. Notifications: in Supabase, Edge Functions → Deploy a new function → Via editor, name it
+   `push-send` and paste `supabase/functions/push-send/index.ts`. Then point the database at it:
+   `update public.push_settings set function_url = 'https://<project-ref>.supabase.co/functions/v1/push-send',
+   anon_key = '<anon key>' where id = 1;`. The function makes its own signing keys the first time it runs.
+5. Deploy: in Cloudflare, Workers & Pages → Create → Pages → Connect to Git, pick this repository,
    framework preset **None**, build command empty, output directory `/`. Every push to `master`
    redeploys.
 
@@ -83,11 +87,13 @@ admin.html, js/admin.js      owner panel
 privacy.html, terms.html, disclaimer.html, developers.html, 404.html, js/page.js
 js/lib/                      shared modules: api (database calls), ui (errors, toasts), slots
                              (time maths), content (editable wording), alarm/ringtone/notify
-                             (alerts), client (device tokens), ics, image, markdown
+                             (alerts), client (device tokens), push/notifyui (notifications),
+                             showcase/autoupdate (3D ring of cuts, self-update), ics, image, markdown
 js/legal-content.js          default legal wording
 css/style.css                all styles
 supabase/schema.sql          the whole database
 supabase/migrations/         upgrades for an existing database
+supabase/functions/push-send sends the notifications (Supabase Edge Function)
 sw.js, manifest.webmanifest  installable app
 _headers                     security and cache headers for Cloudflare Pages
 ```

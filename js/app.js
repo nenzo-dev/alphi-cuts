@@ -16,6 +16,8 @@ import { configureAlarms, updateAlarms, startsIn } from './lib/alarm.js';
 import { bookingIcs, downloadFile } from './lib/ics.js';
 import { prepareImage } from './lib/image.js';
 import { watchAppUpdate } from './lib/appupdate.js';
+import { syncPush } from './lib/push.js';
+import { initNotifyUi, notifyState, showDock, openPanel, turnOnFromPage } from './lib/notifyui.js';
 import {
   arrivalAvailable, arrivalOn, arrivalDenied, turnArrivalOn, turnArrivalOff, updateArrivalWatch,
 } from './lib/arrival.js';
@@ -158,7 +160,8 @@ function renderFreeBanner(freeNow) {
 }
 
 function updateNotifyButton(freeNow) {
-  $('#notify-free-btn').hidden = freeNow || notifyPermission() !== 'default';
+  const push = notifyState();
+  $('#notify-free-btn').hidden = freeNow || !(push === 'on' || push === 'off' || notifyPermission() === 'default');
 }
 
 async function loadQueue() {
@@ -430,6 +433,7 @@ async function submitBooking(e) {
       setStyle('');
       invalidateDays();
       await Promise.allSettled([loadQueue(), refreshSlotOptions(), refreshMyBookings()]);
+      if (!android) showDock(true);
     } catch (err) {
       showError(msg, err);
       invalidateDays();
@@ -476,6 +480,7 @@ async function refreshMyBookings() {
     myRows = sortBookings(keep);
     renderMyBookings();
     setAlarms(keep);
+    syncPush();
     if (!android) updateArrivalWatch({ cfg, rows: keep, onCheckedIn: onArrived });
     checkNextUp();
   } finally {
@@ -675,10 +680,33 @@ function alertSetupHtml() {
         : `<button type="button" class="btn btn-gold btn-sm" data-act="alerts">Turn on alerts</button><p class="small muted">Needed so the app can ring when it's closed.</p>`}
     </div>`;
   }
+  const push = notifyState();
+  if (push === 'on') {
+    return `
+    <div class="alert-setup">
+      <p class="small ok-text">Notifications are on. We'll tell you when it's your turn, even with this site closed.</p>
+      <button type="button" class="link-btn small" data-act="notify-panel">Notification settings</button>
+    </div>`;
+  }
+  if (push === 'off') {
+    return `
+    <div class="alert-setup">
+      <p class="small muted">${esc(t('my_alert_note'))}</p>
+      <button type="button" class="btn btn-gold btn-sm" data-act="notify-on">${esc(t('notify_button'))}</button>
+    </div>`;
+  }
+  if (push === 'ios-install' || push === 'blocked') {
+    return `
+    <div class="alert-setup">
+      <p class="small muted">${push === 'blocked' ? 'Notifications are blocked for this site, so we can only ring while this page is open.' : esc(t('app_ios_note'))}</p>
+      <button type="button" class="btn btn-gold btn-sm" data-act="notify-panel">Show me how</button>
+    </div>`;
+  }
+  // No push notifications in this browser: the page rings while it's open.
   const needsSetup = notifyPermission() === 'default' || !audioUnlocked();
   return `
     <div class="alert-setup">
-      <p class="small muted">${esc(t(isIOS ? 'app_ios_note' : 'my_alert_note'))}</p>
+      <p class="small muted">This page rings when your slot starts. Keep it open, or add the booking to your calendar.</p>
       ${needsSetup ? '<button type="button" class="btn btn-ghost btn-sm" data-act="alerts">Turn on alerts</button>' : ''}
     </div>`;
 }
@@ -784,6 +812,14 @@ async function onTicketAction(e) {
   switch (btn.dataset.act) {
     case 'alerts':
       await enableAlerts();
+      break;
+    case 'notify-on':
+      unlockAudio();
+      chime({ force: true });
+      await turnOnFromPage(btn);
+      break;
+    case 'notify-panel':
+      openPanel();
       break;
     case 'checkin':
       await withBusy(btn, () => doCheckIn(token));
@@ -998,8 +1034,14 @@ function wire() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#chat-form').requestSubmit(); }
   });
   $('#notify-free-btn').addEventListener('click', async () => {
+    const btn = $('#notify-free-btn');
+    if (['on', 'off'].includes(notifyState())) {
+      const next = await turnOnFromPage(btn, { free: true });
+      if (next === 'on') btn.hidden = true;
+      return;
+    }
     const perm = await requestNotifyPermission();
-    $('#notify-free-btn').hidden = true;
+    btn.hidden = true;
     if (perm === 'granted') toast(`We'll let you know when ${ownerFirst()} is free (while this page is open).`);
   });
   $('#pwa-install-btn').addEventListener('click', installWebApp);
@@ -1056,6 +1098,12 @@ async function boot() {
   }
   showMsg($('#bk-msg'), '');
   renderConfig();
+  initNotifyUi({
+    text: (key, extra) => t(key, extra),
+    ownerFirst,
+    onAppAlerts: () => enableAlerts(),
+    onChange: () => { if (myRows.length) renderMyBookings(); },
+  }).catch(() => {});
   await Promise.allSettled([
     loadQueue(),
     loadReviews(),
