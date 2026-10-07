@@ -32,7 +32,8 @@ export function watchForUpdates() {
   });
   addEventListener('pageshow', (e) => { if (e.persisted) check(); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', check);
-  setInterval(() => { if (document.visibilityState === 'visible') check(); }, CHECK_MS);
+  // Pages in the background check too, so they are already up to date when someone comes back to them.
+  setInterval(check, CHECK_MS);
   setTimeout(check, 5000);
 }
 

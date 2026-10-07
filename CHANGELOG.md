@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.2 (2026-10-07)
+
+- A page left open in the background now updates itself there too, so it is already on the newest
+  version when someone comes back to it, instead of reloading as they return.
+
 ## 2.6.1 (2026-10-07)
 
 - "Free right now" is now a glass panel with a pulsing green dot, a slow sweep of light and a glowing
