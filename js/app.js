@@ -154,7 +154,7 @@ let todayQueue = null; // { at, rows } from the last successful load of today's 
 function renderFreeBanner(freeNow) {
   const slot = $('#free-banner-slot');
   if (!freeNow || cfg.hidden.has('queue')) { slot.innerHTML = ''; return; }
-  slot.innerHTML = `<div class="free-banner"><span>${esc(t('queue_free_banner'))}</span>${cfg.hidden.has('book') ? '' : '<a href="#book" class="btn btn-sm btn-dark">Book</a>'}</div>`;
+  slot.innerHTML = `<div class="free-banner"><span class="live-dot" aria-hidden="true"></span><span class="fb-text">${esc(t('queue_free_banner'))}</span>${cfg.hidden.has('book') ? '' : '<a href="#book" class="btn btn-sm btn-gold">Book</a>'}</div>`;
 }
 
 function updateNotifyButton(freeNow) {

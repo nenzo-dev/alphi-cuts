@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.1 (2026-10-07)
+
+- "Free right now" is now a glass panel with a pulsing green dot, a slow sweep of light and a glowing
+  gold Book button, instead of a flat gold box.
+- The same glass look for the other flat blocks: the announcement and app-update bars, chat bubbles,
+  success and error messages, payment notes, the style chip, status labels, the "arrived" tag, the
+  alarm card, the close button on pop-ups and the photo delete buttons.
+- Soft glowing lines between the sections of the home page instead of flat rules, and table rows in
+  the owner panel light up under the mouse.
+
 ## 2.6.0 (2026-10-07)
 
 - A new look. Cards, the header, menus and pop-ups are see-through glass, so the page behind shows
