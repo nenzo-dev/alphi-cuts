@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.6.0 (2026-10-07)
+
+- A new look. Cards, the header, menus and pop-ups are see-through glass, so the page behind shows
+  through.
+- A ring of haircut photos turns slowly in 3D behind every page: the cuts uploaded in the owner panel
+  first, then the built-in styles. It leans towards the mouse, is bright at the top of the home page
+  and dims as you scroll down so the text stays easy to read.
+- Buttons glow, with a sweep of light when you point at them. Cards light up under the mouse, style
+  photos lean towards it in 3D, a soft light follows the mouse, and on a phone a glow shows where you
+  tap. Sections light up as they scroll into view.
+- Open pages update themselves. When a new version of the site is published, an open page reloads at
+  a quiet moment and comes back to the same place, so nobody has to refresh or press Update. It waits
+  while someone has a message typed but not sent, a pop-up is open or an alarm is ringing. The Android
+  app shows this site, so it gets the new look and the updates the same way, without a new app download.
+- Phones with very little memory get a lighter version without the blur, and the movement stays off
+  for anyone whose phone is set to reduce motion.
+
 ## 2.5.1 (2026-10-02)
 
 - The update notice in the Android app goes away once Update is pressed. On app 1.0.0 and 1.1.0 the
