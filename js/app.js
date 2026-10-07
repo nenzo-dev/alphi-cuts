@@ -1,5 +1,5 @@
 import { CONFIG, VERSION } from './config.js';
-import { rpc, rpcOr, select, uploadFile, publicFileUrl } from './lib/api.js';
+import { rpc, rpcOr, rpcShared, select, uploadFile, publicFileUrl } from './lib/api.js';
 import {
   $, $$, esc, showMsg, showError, toast, toastError, withBusy, friendlyError, installGlobalErrorHandlers, GENERIC_ERROR,
   storageGet, storageSet,
@@ -262,7 +262,7 @@ let dbStyles = [];
 let selectedStyle = '';
 
 async function loadDbStyles() {
-  const rows = await rpc('list_haircut_styles');
+  const rows = await rpcShared('list_haircut_styles');
   const byId = new Map();
   for (const r of rows || []) {
     if (!byId.has(r.style_id)) byId.set(r.style_id, { id: r.style_id, label: r.label, photos: [] });
@@ -1117,10 +1117,26 @@ function showStartupError(err) {
   showMsg($('#bk-msg'), text, 'error');
 }
 
+const CONFIG_KEY = 'ac_site_config';
+
+function savedConfig() {
+  try {
+    const row = JSON.parse(storageGet(CONFIG_KEY) || 'null');
+    return row && typeof row === 'object' && !Array.isArray(row) ? row : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fetches the shop's settings and keeps a copy for the next visit. Answers whether they changed. */
 async function loadConfig() {
   const rows = await select('site_config', 'id=eq.1&select=*');
   if (!rows || !rows[0]) throw new Error('site settings missing');
+  const text = JSON.stringify(rows[0]);
+  const changed = text !== storageGet(CONFIG_KEY);
+  if (changed) storageSet(CONFIG_KEY, text);
   cfg = normalizeConfig(rows[0]);
+  return changed;
 }
 
 function startPolling() {
@@ -1148,6 +1164,13 @@ async function boot() {
   setupAppSection().catch(() => {});
   watchAppUpdate(android); // inside the Android app: the update pop-up and bar (lib/appupdate.js)
 
+  // The shop's settings from the last visit show the page straight away; the latest ones replace
+  // them as soon as they arrive (and the page is drawn again only if something changed).
+  const saved = savedConfig();
+  if (saved) {
+    cfg = normalizeConfig(saved);
+    loadConfig().then((changed) => { if (changed) { renderConfig(); loadQueue().catch(() => {}); } }).catch(() => {});
+  }
   for (let attempt = 0; !cfg; attempt++) {
     try {
       await loadConfig();
@@ -1174,7 +1197,4 @@ async function boot() {
 }
 
 boot();
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
-}
+// The service worker (sw.js) is registered by js/lib/autoupdate.js, on every page.

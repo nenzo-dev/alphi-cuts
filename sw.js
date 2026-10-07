@@ -1,20 +1,30 @@
-// Service worker: makes the site installable, lets it open on a flaky connection, shows the shop's
-// notifications when they arrive (even with the site closed, 2.7.0), and opens the right page when
-// one is tapped.
-// Pages and code are network-first so updates show up straight away; images are cache-first.
-const VERSION = '2.9.0';
+// Service worker: makes the site open fast and installable, lets it open on a flaky connection, shows
+// the shop's notifications when they arrive (even with the site closed, 2.7.0), and opens the right
+// page when one is tapped.
+//
+// Since 2.10.0 the pages and their code are kept on the phone and opened from there, so a visit
+// doesn't wait for the network for every file. Each release has its own VERSION, so a new release
+// is a new service worker: it downloads the new files in the background, replaces the old copies,
+// and js/lib/autoupdate.js then reloads open pages onto it. So every release must bump VERSION here
+// (and in js/config.js). Version checks and anything asked for fresh still go to the network.
+const VERSION = '2.10.0';
 const CACHE = `alphicuts-${VERSION}`;
 const CORE = [
-  './', 'css/style.css', 'manifest.webmanifest', 'icons/logo-96.webp', 'icons/logo-512.webp',
-  'js/app.js', 'js/config.js', 'js/styles-data.js',
+  './', 'admin', 'privacy', 'terms', 'disclaimer', 'developers',
+  'css/style.css', 'manifest.webmanifest',
+  'icons/logo-96.webp', 'icons/logo-512.webp', 'icons/favicon-32.png', 'icons/icon-192.png',
+  'js/app.js', 'js/admin.js', 'js/page.js', 'js/config.js', 'js/fx.js', 'js/styles-data.js', 'js/legal-content.js',
   'js/lib/api.js', 'js/lib/ui.js', 'js/lib/slots.js', 'js/lib/content.js', 'js/lib/client.js',
-  'js/lib/alarm.js', 'js/lib/ringtone.js', 'js/lib/notify.js', 'js/lib/ics.js', 'js/lib/image.js', 'js/lib/appupdate.js', 'js/lib/arrival.js',
-  'js/fx.js', 'js/lib/showcase.js', 'js/lib/autoupdate.js', 'js/lib/push.js', 'js/lib/notifyui.js',
-  'js/lib/soundui.js', 'img/map.webp',
+  'js/lib/alarm.js', 'js/lib/ringtone.js', 'js/lib/notify.js', 'js/lib/ics.js', 'js/lib/image.js',
+  'js/lib/appupdate.js', 'js/lib/arrival.js', 'js/lib/showcase.js', 'js/lib/autoupdate.js',
+  'js/lib/push.js', 'js/lib/notifyui.js', 'js/lib/soundui.js', 'js/lib/markdown.js',
+  'img/map.webp',
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}));
+  // One by one, so a single missing file doesn't stop the rest being saved. `reload` skips the
+  // browser's own cache, so this version's files are the ones saved.
+  event.waitUntil(caches.open(CACHE).then((c) => Promise.all(CORE.map((path) => c.add(new Request(path, { cache: 'reload' })).catch(() => {})))));
   self.skipWaiting();
 });
 
@@ -27,7 +37,7 @@ self.addEventListener('activate', (event) => {
 });
 
 function store(request, response) {
-  if (response && response.ok && response.type === 'basic') {
+  if (response && response.ok && response.type === 'basic' && !response.redirected) {
     const copy = response.clone();
     caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
   }
@@ -40,17 +50,20 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // database and other sites: never cached here
   if (url.pathname.startsWith('/app/')) return;    // the Android app download is always fetched fresh
+  // The new-version check (js/lib/autoupdate.js) asks for config.js with no-store: straight to the network.
+  if (request.cache === 'no-store' || request.cache === 'reload' || (url.search && request.mode !== 'navigate')) return;
 
-  if (url.pathname.includes('/img/') || url.pathname.includes('/icons/')) {
-    event.respondWith(caches.match(request).then((hit) => hit || fetch(request).then((res) => store(request, res))));
-    return;
-  }
-
-  event.respondWith(
-    fetch(request)
-      .then((res) => store(request, res))
-      .catch(async () => (await caches.match(request)) || (request.mode === 'navigate' ? caches.match('./') : Response.error())),
-  );
+  // Saved copy first; the network only for something not saved yet (which is then saved).
+  event.respondWith((async () => {
+    const hit = await caches.match(request, { ignoreSearch: request.mode === 'navigate' });
+    if (hit) return hit;
+    try {
+      return store(request, await fetch(request));
+    } catch {
+      if (request.mode === 'navigate') return (await caches.match('./')) || Response.error();
+      return Response.error();
+    }
+  })());
 });
 
 // A notification from the shop's server (supabase/functions/push-send): { title, body, url, tag, urgent }.

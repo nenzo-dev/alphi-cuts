@@ -16,6 +16,10 @@ let newer = null;
 let timer = 0;
 
 export function watchForUpdates() {
+  // Every page registers the service worker, which keeps the site's files on the phone (sw.js).
+  if ('serviceWorker' in navigator) {
+    addEventListener('load', () => { navigator.serviceWorker.register(new URL('../../sw.js', import.meta.url)).catch(() => {}); });
+  }
   resumeScroll();
   for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
     addEventListener(type, () => { lastTouch = Date.now(); }, { passive: true, capture: true });
@@ -54,9 +58,33 @@ async function check() {
     try { done = sessionStorage.getItem(DONE_KEY); } catch { /* not kept on this phone */ }
     if (done === v) return;
     newer = v;
+    await newFilesSaved();
     tryReload();
   } catch {
     /* offline or the check failed: try again next time */
+  }
+}
+
+// Pages open from the copy the service worker keeps on the phone (sw.js), so before reloading, let
+// the new version's service worker finish saving its files. Otherwise the reload would bring back
+// the old copy. Gives up waiting after 30 seconds.
+async function newFilesSaved() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) return;
+    await reg.update().catch(() => {});
+    const worker = reg.installing || reg.waiting;
+    if (!worker) return;
+    await new Promise((resolve) => {
+      const done = () => { clearTimeout(timeout); resolve(); };
+      const timeout = setTimeout(resolve, 30000);
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'activated' || worker.state === 'redundant') done();
+      });
+    });
+  } catch {
+    /* reload anyway */
   }
 }
 

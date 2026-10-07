@@ -2,7 +2,8 @@
 // uploaded in the owner panel first, then the built-in styles, and leans a little towards the mouse.
 // On the home page it is bright behind the top of the page and dims as you scroll down; on the other
 // pages it stays dim so the text is easy to read.
-import { rpc, publicFileUrl } from './api.js';
+import { rpcShared, publicFileUrl } from './api.js';
+import { storageGet, storageSet } from './ui.js';
 import { HAIRCUT_STYLES, styleThumb } from '../styles-data.js';
 
 const SITE = new URL('../../', import.meta.url);
@@ -19,18 +20,35 @@ export function mountShowcase({ count = 12, quiet = false, still = false } = {})
 
   const ring = stage.querySelector('.cuts-ring');
   const builtIn = HAIRCUT_STYLES.map((s) => new URL(styleThumb(s), SITE).href);
-  paint(stage, ring, pick(builtIn, count));
+  // The uploaded cuts from the last visit go up straight away; the ring is only redrawn if they changed.
+  const saved = savedPhotos();
+  let shown = pick([...saved, ...builtIn], count);
+  paint(stage, ring, shown);
 
-  rpc('list_haircut_styles')
+  rpcShared('list_haircut_styles')
     .then((rows) => {
       const uploaded = [...new Set((rows || []).filter((r) => r.storage_path).map((r) => publicFileUrl('haircut-styles', r.storage_path)))];
-      if (uploaded.length) paint(stage, ring, pick([...uploaded, ...builtIn], count));
+      storageSet(PHOTOS_KEY, JSON.stringify(uploaded.slice(0, 24)));
+      const next = pick([...uploaded, ...builtIn], count);
+      if (next.join() !== shown.join()) { shown = next; paint(stage, ring, shown); }
     })
-    .catch(() => { /* the built-in styles are already turning */ });
+    .catch(() => { /* the ring is already turning */ });
 
   addEventListener('resize', () => size(stage, ring), { passive: true });
   if (!still) leanTowardsMouse(stage);
   if (!quiet) dimOnScroll(stage);
+  restWhileScrolling();
+}
+
+const PHOTOS_KEY = 'ac_ring_photos';
+
+function savedPhotos() {
+  try {
+    const list = JSON.parse(storageGet(PHOTOS_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((u) => typeof u === 'string' && /^https:\/\//.test(u)) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** The first `count` photos, repeated if there aren't enough to go round. */
@@ -80,7 +98,20 @@ function dimOnScroll(stage) {
     raf = 0;
     const gone = Math.min(scrollY / (innerHeight * 1.1), 1);
     stage.style.setProperty('--cuts-o', (1 - gone * 0.75).toFixed(3));
+    // Past the top of the page the ring is only a dim backdrop, so it rests there (css: fx-past-hero).
+    document.documentElement.classList.toggle('fx-past-hero', gone > 0.85);
   };
   addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(apply); }, { passive: true });
   apply();
+}
+
+/** The ring rests while the page is scrolling, which keeps scrolling smooth on phones (css: fx-scrolling). */
+function restWhileScrolling() {
+  const root = document.documentElement;
+  let timer = 0;
+  addEventListener('scroll', () => {
+    if (!timer) root.classList.add('fx-scrolling');
+    clearTimeout(timer);
+    timer = setTimeout(() => { timer = 0; root.classList.remove('fx-scrolling'); }, 220);
+  }, { passive: true });
 }

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.10.0 (2026-10-07)
+
+Faster, especially on slow connections and older phones. No database change.
+
+- Pages open from the copy kept on the phone instead of waiting for the network for every file.
+  A new release downloads in the background and open pages switch to it by themselves, as before.
+  Every page (the owner panel too) now sets this up, not only the home page.
+- The home page shows straight away with the shop's settings from the last visit and swaps in the
+  latest ones as soon as they arrive.
+- The list of uploaded cuts is asked for once per page instead of twice, and the 3D ring shows the
+  uploaded cuts from the last visit straight away instead of being drawn twice.
+- Lighter effects: the ring rests while the page scrolls and once you're past the top, the soft
+  lights behind it no longer use a moving blur, and the gold buttons pulse a few times and then
+  glow steadily. On phones the panels stay see-through without the frosted blur, which phones had
+  to redraw whenever anything behind them moved. The hover light only runs with a mouse.
+- The owner panel loads its scripts all at once.
+
 ## 2.9.0 (2026-10-07)
 
 No database change. The Android app goes to 1.4.0 (built and published by GitHub Actions).

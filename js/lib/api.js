@@ -54,6 +54,19 @@ export function rpc(name, args = {}) {
   return request(`/rest/v1/rpc/${name}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(args) });
 }
 
+// The same read asked for by two parts of a page at once (the photo ring and the styles gallery
+// both want the uploaded cuts) goes out once, and both get the answer.
+const shared = new Map();
+export function rpcShared(name, args = {}) {
+  const key = `${name}:${JSON.stringify(args)}`;
+  if (!shared.has(key)) {
+    const p = rpc(name, args);
+    shared.set(key, p);
+    p.then(() => setTimeout(() => shared.delete(key), 10000), () => shared.delete(key));
+  }
+  return shared.get(key);
+}
+
 export function select(table, query) {
   return request(`/rest/v1/${table}?${query}`);
 }

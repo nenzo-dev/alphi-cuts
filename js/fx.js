@@ -82,6 +82,7 @@ function glowWhereTapped() {
 function lightUpUnderPointer() {
   const LIT = '.card, .style-card, .btn, .ticket, .stat, .slot, .team li';
   document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return; // the light only shows on hover; a finger would just cost work
     const el = e.target && e.target.closest ? e.target.closest(LIT) : null;
     if (!el) return;
     const r = el.getBoundingClientRect();
