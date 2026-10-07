@@ -10,11 +10,13 @@ import { fmtTime, todayISO, addDaysISO, daySlots, dayName, toMin } from './lib/s
 import { TEXT_GROUPS, DEFAULT_TEXT, TEXT_LABELS, OPTIONAL_TEXT, SECTIONS, PLACEHOLDERS } from './lib/content.js';
 import { LEGAL_DOCS } from './legal-content.js';
 import { prepareImage } from './lib/image.js';
-import { armAudioUnlock, chime } from './lib/ringtone.js';
+import { armAudioUnlock, chime, loadCustomSound } from './lib/ringtone.js';
+import { openSounds } from './lib/soundui.js';
 import { ownerPushState, ownerTurnOn, ownerTurnOff, sendTestPush } from './lib/push.js';
 
 installGlobalErrorHandlers();
 armAudioUnlock();
+loadCustomSound(); // the owner's own sound for new bookings, if they saved one
 
 // ---------------------------------------------------------------- auth
 // Supabase Auth checks the password (it stores only a hash). This page never keeps the password;
@@ -307,6 +309,10 @@ async function renderOwnerNotify() {
     try { await ownerTurnOff(); } catch (err) { report(err); }
     await renderOwnerNotify();
   });
+  // The sound this panel plays for a new booking while it's open (lib/soundui.js).
+  $('#on-sounds').addEventListener('click', () => openSounds({
+    kinds: ['alert'], labels: { alert: 'New bookings while this panel is open' }, place: 'this panel',
+  }));
 }
 
 let shellWired = false;

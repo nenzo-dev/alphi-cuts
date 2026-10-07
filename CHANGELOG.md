@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.9.0 (2026-10-07)
+
+No database change. The Android app goes to 1.4.0 (built and published by GitHub Actions).
+
+- Sounds: everyone can choose their own tones. In a browser there are six sounds (phone ring,
+  two-note chime, bell, alarm clock, marimba, soft rise) for "it's your turn" and for heads-ups and
+  messages, each with a Play button, or a sound file of their own (MP3, M4A or WAV up to 3 MB, kept
+  on the device and never uploaded).
+- Sounds is in the bell's panel and under "My booking" ("Choose your sounds"), and in the owner
+  panel for the new-booking sound.
+- With the site closed, notifications use the phone's own sound, which websites can't change; the
+  panel says where to change it on Android, iPhone and computers.
+- In the Android app, Sounds has "Choose sound" for Your turn, Booking updates and Messages, which
+  opens the phone's own sound picker for that alert (app 1.4.0).
+- The privacy policy says the chosen sounds and sound file stay on the device.
+
 ## 2.8.1 (2026-10-07)
 
 - Fixed: the owner panel couldn't sign in since 2.7.0. An apostrophe in one of its messages stopped

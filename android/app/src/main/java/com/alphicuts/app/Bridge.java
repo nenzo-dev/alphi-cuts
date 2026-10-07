@@ -86,4 +86,10 @@ final class Bridge {
     public void openInstallSettings() {
         if (activity.isTrustedPage()) activity.runOnUiThread(() -> activity.openInstallSettings(""));
     }
+
+    /** "Choose sound" in Sounds: the phone's own settings for that kind of alert. */
+    @JavascriptInterface
+    public void openSoundSettings(String which) {
+        if (activity.isTrustedPage()) activity.runOnUiThread(() -> activity.openSoundSettings(which));
+    }
 }

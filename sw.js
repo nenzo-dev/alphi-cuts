@@ -2,7 +2,7 @@
 // notifications when they arrive (even with the site closed, 2.7.0), and opens the right page when
 // one is tapped.
 // Pages and code are network-first so updates show up straight away; images are cache-first.
-const VERSION = '2.8.1';
+const VERSION = '2.9.0';
 const CACHE = `alphicuts-${VERSION}`;
 const CORE = [
   './', 'css/style.css', 'manifest.webmanifest', 'icons/logo-96.webp', 'icons/logo-512.webp',
@@ -10,7 +10,7 @@ const CORE = [
   'js/lib/api.js', 'js/lib/ui.js', 'js/lib/slots.js', 'js/lib/content.js', 'js/lib/client.js',
   'js/lib/alarm.js', 'js/lib/ringtone.js', 'js/lib/notify.js', 'js/lib/ics.js', 'js/lib/image.js', 'js/lib/appupdate.js', 'js/lib/arrival.js',
   'js/fx.js', 'js/lib/showcase.js', 'js/lib/autoupdate.js', 'js/lib/push.js', 'js/lib/notifyui.js',
-  'img/map.webp',
+  'js/lib/soundui.js', 'img/map.webp',
 ];
 
 self.addEventListener('install', (event) => {

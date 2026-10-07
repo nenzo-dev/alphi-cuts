@@ -22,6 +22,7 @@ This page explains what {shop} collects through this website, why we collect it,
 - **Arriving at the shop:** only if you turn on "Check me in when I arrive" (see below).
 - **Notifications:** only if you turn them on (see below).
 - **On your device:** the site keeps a few random codes in your browser so it can show your own booking and chat. They don't contain your name or number. Clearing your browser data removes them, but you'll no longer see your booking on that device.
+- **Your sounds:** the tones you choose, and any sound file you pick as your own, are kept in your browser on that device. The file is never uploaded to us.
 
 We don't use advertising or tracking cookies, and we never sell your information.
 

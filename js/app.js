@@ -11,7 +11,8 @@ import {
 import { deviceToken, hasDeviceToken, bookingTokens, addBookingToken, setBookingTokens } from './lib/client.js';
 import { makeText, applyText, DEFAULT_TEXT } from './lib/content.js';
 import { notifyPermission, requestNotifyPermission, notify } from './lib/notify.js';
-import { armAudioUnlock, unlockAudio, audioUnlocked, chime } from './lib/ringtone.js';
+import { armAudioUnlock, unlockAudio, audioUnlocked, chime, loadCustomSound } from './lib/ringtone.js';
+import { openSounds } from './lib/soundui.js';
 import { configureAlarms, updateAlarms, startsIn } from './lib/alarm.js';
 import { bookingIcs, downloadFile } from './lib/ics.js';
 import { prepareImage } from './lib/image.js';
@@ -716,6 +717,9 @@ function renderMyBookings() {
   loadPaymentDetails();
 }
 
+// Where people choose their own tones (lib/soundui.js).
+const SOUNDS_LINK = '<button type="button" class="link-btn small snd-link" data-act="sounds">Choose your sounds</button>';
+
 function alertSetupHtml() {
   if (android) {
     const st = appStatus();
@@ -725,6 +729,7 @@ function alertSetupHtml() {
       ${st && st.ready
         ? '<p class="small ok-text">Alerts are on.</p>'
         : `<button type="button" class="btn btn-gold btn-sm" data-act="alerts">Turn on alerts</button><p class="small muted">Needed so the app can ring when it's closed.</p>`}
+      ${SOUNDS_LINK}
     </div>`;
   }
   const push = notifyState();
@@ -733,6 +738,7 @@ function alertSetupHtml() {
     <div class="alert-setup">
       <p class="small ok-text">Notifications are on. We'll tell you when it's your turn, even with this site closed.</p>
       <button type="button" class="link-btn small" data-act="notify-panel">Notification settings</button>
+      ${SOUNDS_LINK}
     </div>`;
   }
   if (push === 'off') {
@@ -740,6 +746,7 @@ function alertSetupHtml() {
     <div class="alert-setup">
       <p class="small muted">${esc(t('my_alert_note'))}</p>
       <button type="button" class="btn btn-gold btn-sm" data-act="notify-on">${esc(t('notify_button'))}</button>
+      ${SOUNDS_LINK}
     </div>`;
   }
   if (push === 'ios-install' || push === 'blocked') {
@@ -747,6 +754,7 @@ function alertSetupHtml() {
     <div class="alert-setup">
       <p class="small muted">${push === 'blocked' ? 'Notifications are blocked for this site, so we can only ring while this page is open.' : esc(t('app_ios_note'))}</p>
       <button type="button" class="btn btn-gold btn-sm" data-act="notify-panel">Show me how</button>
+      ${SOUNDS_LINK}
     </div>`;
   }
   // No push notifications in this browser: the page rings while it's open.
@@ -755,6 +763,7 @@ function alertSetupHtml() {
     <div class="alert-setup">
       <p class="small muted">This page rings when your slot starts. Keep it open, or add the booking to your calendar.</p>
       ${needsSetup ? '<button type="button" class="btn btn-ghost btn-sm" data-act="alerts">Turn on alerts</button>' : ''}
+      ${SOUNDS_LINK}
     </div>`;
 }
 
@@ -867,6 +876,9 @@ async function onTicketAction(e) {
       break;
     case 'notify-panel':
       openPanel();
+      break;
+    case 'sounds':
+      openSounds();
       break;
     case 'checkin':
       await withBusy(btn, () => doCheckIn(token));
@@ -1129,6 +1141,7 @@ function startPolling() {
 
 async function boot() {
   if (android) document.documentElement.classList.add('in-app');
+  loadCustomSound(); // their own sound, if they saved one (lib/ringtone.js)
   renderStyleGallery();
   wire();
   loadDbStyles().then(() => { if (dbStyles.length) renderStyleGallery(); }).catch(() => {});

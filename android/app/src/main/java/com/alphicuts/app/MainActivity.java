@@ -280,6 +280,8 @@ public class MainActivity extends Activity {
             // "Check me in when I arrive": turned on, and what Android allows (Arrival.java).
             o.put("arrival", new JSONObject().put("on", Arrival.enabled(this))
                     .put("location", Arrival.hasLocation(this)).put("background", Arrival.hasBackground(this)));
+            // Each kind of alert has its own sound, chosen in the phone's settings (openSoundSettings).
+            o.put("sounds", Build.VERSION.SDK_INT >= 26);
         } catch (Exception ignored) {
             // leave whatever was filled in
         }
@@ -469,6 +471,35 @@ public class MainActivity extends Activity {
         Store.putInt(this, "resumeUpdate", InstallBlock.resumesAfterSettings(r) ? 1 : 0);
         Log.i(TAG, "Opening settings for: " + r);
         InstallBlock.open(this, r);
+    }
+
+    /**
+     * Opens the phone's settings for one kind of alert ("alarm", "updates" or "messages"), where the
+     * client picks its sound. Android keeps a notification's sound in its channel, so this is the
+     * one place it can be changed.
+     */
+    void openSoundSettings(String which) {
+        String channel = "updates".equals(which) ? Notifier.CH_UPDATES
+                : "messages".equals(which) ? Notifier.CH_MESSAGES : Notifier.CH_ALARM;
+        Notifier.channels(this);
+        Intent[] tries = Build.VERSION.SDK_INT >= 26
+                ? new Intent[]{
+                        new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
+                                .putExtra(Settings.EXTRA_CHANNEL_ID, channel),
+                        new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()),
+                        new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))}
+                : new Intent[]{new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))};
+        for (Intent i : tries) {
+            try {
+                startActivity(i);
+                return;
+            } catch (ActivityNotFoundException | SecurityException ignored) {
+                // try the next, more general screen
+            }
+        }
+        Toast.makeText(this, "Open Settings, then Apps, AlPhi Cuts, Notifications.", Toast.LENGTH_LONG).show();
     }
 
     void printPage() {

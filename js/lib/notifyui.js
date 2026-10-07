@@ -3,9 +3,11 @@
 //   - the panel: what you get, a big "Turn on notifications" button, and clear steps for iPhone,
 //     for a browser that blocked them, and for the Android app
 //   - a floating prompt at the bottom of the home page (and again right after booking)
+//   - a way into Sounds, where people choose their own tones (2.9.0, js/lib/soundui.js)
 // The wording comes from the owner's editable text (js/lib/content.js, "Notifications" group).
 import { $, esc, toast, toastError, storageGet, storageSet } from './ui.js';
 import { pushState, turnOnPush, turnOffPush, freeToday, setFreeToday, sendTestPush, deviceInfo } from './push.js';
+import { openSounds, SPEAKER } from './soundui.js';
 
 const BELL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg>';
 const DOCK_KEY = 'ac_notify_dock_hidden_until';
@@ -197,6 +199,11 @@ export async function openPanel() {
         <button type="button" class="modal-close" id="np-close" aria-label="Close">&times;</button>
         <div class="np-head"><span class="np-bell">${BELL}</span><h3 id="np-title">${esc(text('notify_title'))}</h3></div>
         ${panelBody(free)}
+        <button type="button" class="np-sounds" id="np-sounds">
+          <span class="np-sounds-icon">${SPEAKER}</span>
+          <span class="np-sounds-text"><b>Sounds</b><small>Choose your own tones</small></span>
+          <span class="np-sounds-go" aria-hidden="true">&rsaquo;</span>
+        </button>
       </div>
     </div>`;
   const close = () => {
@@ -245,6 +252,7 @@ export async function openPanel() {
   if (app) app.addEventListener('click', () => { close(); onAppAlerts(); });
   const getApp = $('#np-getapp');
   if (getApp) getApp.addEventListener('click', close);
+  $('#np-sounds').addEventListener('click', () => { document.removeEventListener('keydown', onKey); openSounds(); });
   const first = root.querySelector('#np-on, #np-test, #np-recheck, #np-app, #np-getapp, #np-close');
   if (first) first.focus();
 }
