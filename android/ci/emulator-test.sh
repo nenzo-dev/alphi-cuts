@@ -11,8 +11,10 @@
 #     "Install unknown apps" off: the app must say so and "Open settings" must open that setting.
 #     Once it's on, the update carries on by itself, and Android's installer replaces the app.
 #  4. Sounds: the test page chooses the bell for "your turn" and the marimba for heads-ups (their
-#     channels must carry the app's tones, and the alarm must ring on the new channel), and at the
-#     end "Choose from the phone's sounds" must open Android's sound list in the app.
+#     channels must carry the app's tones, and the alarm must ring on the new channel). At the end
+#     the phone's sound list is opened from the app and a sound picked in it (OK), and the phone's
+#     file picker is opened from the app and an audio file picked in it: each must become that
+#     alert's sound.
 #
 # Screenshots, logs and results.txt go to ci-results/.
 set -u
@@ -83,7 +85,17 @@ tap_text() {
   read -r x1 y1 x2 y2 <<<"$(echo "$bounds" | grep -oE '[0-9]+' | tr '\n' ' ')"
   adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
 }
+tap_desc() {
+  local bounds
+  bounds=$(ui_dump | tr '>' '\n' | grep -iF "content-desc=\"$1\"" | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | head -1)
+  [ -n "$bounds" ] || return 1
+  local x1 y1 x2 y2
+  read -r x1 y1 x2 y2 <<<"$(echo "$bounds" | grep -oE '[0-9]+' | tr '\n' ' ')"
+  adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+}
 screen_has() { ui_dump | grep -qiF "$1"; }
+# channel_sound CHANNEL TEXT: the live channel (not a deleted one) has a sound containing TEXT
+channel_sound() { adb shell dumpsys notification --noredact | grep -E "mId='$1(_[0-9]+)?'" | grep -v "mDeleted=true" | grep -qF "mSound=$2"; }
 focus_is() { adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$1"; }
 
 adb wait-for-device
@@ -254,12 +266,65 @@ shot 08-after-update
 adb logcat -d -s AlPhiCuts:V > "$OUT/update-log.txt"
 kill "$SERVER" 2>/dev/null
 
-# ---------------------------------------------------------------- 4. the phone's sounds, picked in the app
+# ---------------------------------------------------------------- 4. sounds opened from the app itself
+# (a) "Phone's sounds": Android's sound list opens in the app; a sound picked there, with OK, becomes
+#     the booking updates' sound.
 adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/sound-test.html >/dev/null
 picker_up() { adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" | grep -qiE "RingtonePicker|soundpicker"; }
-if wait_for 30 picker_up; then pass "the phone's sound list opens in the app"; else fail "the phone's sound list did not open in the app"; fi
-shot 09-sound-picker
-adb shell input keyevent KEYCODE_BACK
+if wait_for 30 picker_up; then
+  pass "the phone's sound list opens in the app"
+  sleep 2
+  shot 09-sound-picker
+  # The first sound in the list that isn't "Default ...".
+  sound=$(ui_dump | tr '>' '\n' | grep -E 'CheckedTextView|android:id/text1' | grep -oE 'text="[^"]+"' | sed 's/^text="//; s/"$//' | grep -viE '^(default|none|silent)' | head -1)
+  echo "sound list pick: ${sound:-none}" >> "$OUT/adb-log.txt"
+  if [ -n "$sound" ] && tap_text "$sound" && sleep 1 && tap_text "OK"; then
+    if wait_for 20 channel_sound booking_updates "content://media"; then
+      pass "a sound picked from the phone's list becomes the booking updates' sound ($sound)"
+    else
+      fail "the sound picked from the phone's list was not used"
+    fi
+  else
+    fail "couldn't pick a sound in the phone's list"
+    adb shell input keyevent KEYCODE_BACK
+  fi
+else
+  fail "the phone's sound list did not open in the app"
+fi
+
+# (b) "My own file": the phone's file picker opens in the app; an audio file picked there is saved
+#     among the phone's sounds and becomes the messages' sound.
+adb push android/app/src/main/res/raw/tone_bell_short.wav /sdcard/Download/ci-own-tone.wav >/dev/null
+adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/file-test.html >/dev/null
+files_up() { adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" | grep -qiE "documentsui|DocumentsActivity|PickActivity"; }
+pick_file() { tap_text "ci-own-tone.wav"; }
+if wait_for 30 files_up; then
+  pass "the phone's file picker opens in the app"
+  sleep 3
+  shot 10-file-picker
+  if ! wait_for 8 pick_file; then
+    # Not in Recent: open the list of places and go to Downloads.
+    tap_desc "Show roots" || tap_desc "Navigate up"
+    sleep 2
+    tap_text "Downloads" || tap_text "Download"
+    sleep 3
+    wait_for 15 pick_file
+  fi
+  if wait_for 30 channel_sound messages "content://media"; then
+    pass "an audio file picked in the app becomes the messages' sound"
+  else
+    fail "the audio file picked in the app was not used"
+    shot 11-file-picker-after
+  fi
+  if adb shell ls "/sdcard/Notifications/AlPhi Cuts/" 2>/dev/null | grep -qF "ci-own-tone"; then
+    pass "the file is saved among the phone's sounds (Notifications/AlPhi Cuts)"
+  else
+    fail "the file was not saved among the phone's sounds"
+  fi
+else
+  fail "the phone's file picker did not open in the app"
+fi
+adb shell am force-stop "$DBG"
 
 adb logcat -d -b crash > "$OUT/crashes.txt" 2>/dev/null
 if grep -qF "alphicuts" "$OUT/crashes.txt"; then fail "the app crashed (see crashes.txt)"; else pass "no crashes"; fi

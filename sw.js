@@ -7,7 +7,7 @@
 // is a new service worker: it downloads the new files in the background, replaces the old copies,
 // and js/lib/autoupdate.js then reloads open pages onto it. So every release must bump VERSION here
 // (and in js/config.js). Version checks and anything asked for fresh still go to the network.
-const VERSION = '2.10.3';
+const VERSION = '2.10.4';
 const CACHE = `alphicuts-${VERSION}`;
 // Photos and icons are kept across releases (they rarely change), so a new release doesn't download
 // them all again. Raise the number if a picture is ever replaced at the same address.

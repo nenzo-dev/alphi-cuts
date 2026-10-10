@@ -6,6 +6,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -19,6 +20,8 @@ import android.provider.Settings;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -130,7 +133,7 @@ final class Sounds {
                 String type = isTone(ch) ? ch : ch.startsWith("phone:") ? "phone" : ch.startsWith("file:") ? "file" : "default";
                 o.put(k, new JSONObject().put("choice", type).put("label", label == null ? "" : label));
             }
-            o.put("ownFile", Build.VERSION.SDK_INT >= 29);
+            o.put("ownFile", true); // Android 9 and older need the storage permission first (MainActivity)
         } catch (Exception ignored) {
             // whatever was filled in
         }
@@ -170,11 +173,10 @@ final class Sounds {
 
     /**
      * Copies a sound file the client chose into the phone's own sounds and uses it. Runs off the main
-     * thread. Answers an error for people, or null when it worked.
+     * thread. Answers an error for people, or null when it worked. On Android 9 and older the copy
+     * needs the storage permission (MainActivity asks for it before the file is chosen).
      */
-    @android.annotation.TargetApi(29)
     static String applyFile(Context c, String kind, Uri source) {
-        if (Build.VERSION.SDK_INT < 29) return "This phone can't use a sound file here. Pick one of the phone's sounds instead.";
         ContentResolver cr = c.getContentResolver();
         String name = "My sound";
         long size = -1;
@@ -186,43 +188,106 @@ final class Sounds {
         } catch (Exception ignored) {
             // unnamed
         }
-        if (size > MAX_FILE_BYTES) return "That file is too big. Choose one under 10 MB.";
+        if (size > MAX_FILE_BYTES) return TOO_BIG;
         String mime = cr.getType(source);
         if (mime == null || !mime.startsWith("audio/")) mime = "audio/mpeg";
         boolean alarm = "alarm".equals(kind);
+        Uri dest;
+        try {
+            dest = Build.VERSION.SDK_INT >= 29
+                    ? copyIntoSounds(cr, source, name, mime, alarm, kind)
+                    : copyIntoSoundsOld(cr, source, name, mime, alarm, kind);
+        } catch (Exception e) {
+            return "too big".equals(e.getMessage()) ? TOO_BIG : "Couldn't use that file. Try an MP3 or M4A.";
+        }
+        if (dest == null) return "Couldn't save the sound on this phone.";
+        final Uri saved = dest;
+        final String shown = name;
+        main.post(() -> apply(c, kind, "file:" + saved, shown));
+        return null;
+    }
+
+    private static final String TOO_BIG = "That file is too big. Choose one under 10 MB.";
+
+    /** Android 10 and later: into Alarms or Notifications through MediaStore, no permission needed. */
+    @android.annotation.TargetApi(29)
+    private static Uri copyIntoSounds(ContentResolver cr, Uri source, String name, String mime, boolean alarm, String kind) throws Exception {
         ContentValues v = new ContentValues();
         v.put(MediaStore.MediaColumns.DISPLAY_NAME, "AlPhi Cuts " + kind + " - " + name);
         v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
         v.put(MediaStore.MediaColumns.RELATIVE_PATH, (alarm ? Environment.DIRECTORY_ALARMS : Environment.DIRECTORY_NOTIFICATIONS) + "/AlPhi Cuts");
         v.put(alarm ? MediaStore.Audio.Media.IS_ALARM : MediaStore.Audio.Media.IS_NOTIFICATION, 1);
         v.put(MediaStore.MediaColumns.IS_PENDING, 1);
-        Uri dest = null;
-        try {
-            dest = cr.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), v);
-            if (dest == null) return "Couldn't save the sound on this phone.";
-            long copied = 0;
-            try (InputStream in = cr.openInputStream(source); OutputStream out = cr.openOutputStream(dest)) {
-                if (in == null || out == null) throw new IllegalStateException("no stream");
-                byte[] buf = new byte[64 * 1024];
-                for (int n; (n = in.read(buf)) > 0; ) {
-                    copied += n;
-                    if (copied > MAX_FILE_BYTES) throw new IllegalStateException("too big");
-                    out.write(buf, 0, n);
-                }
-            }
-            v.clear();
-            v.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            cr.update(dest, v, null, null);
+        Uri dest = cr.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), v);
+        if (dest == null) return null;
+        try (InputStream in = cr.openInputStream(source); OutputStream out = cr.openOutputStream(dest)) {
+            copy(in, out);
         } catch (Exception e) {
-            if (dest != null) {
-                try { cr.delete(dest, null, null); } catch (Exception ignored) { /* already gone */ }
-            }
-            return "too big".equals(e.getMessage()) ? "That file is too big. Choose one under 10 MB." : "Couldn't use that file. Try an MP3 or M4A.";
+            try { cr.delete(dest, null, null); } catch (Exception ignored) { /* already gone */ }
+            throw e;
         }
-        final Uri saved = dest;
-        final String shown = name;
-        main.post(() -> apply(c, kind, "file:" + saved, shown));
-        return null;
+        v.clear();
+        v.put(MediaStore.MediaColumns.IS_PENDING, 0);
+        cr.update(dest, v, null, null);
+        return dest;
+    }
+
+    /** Android 9 and older: a file in the shared Alarms or Notifications folder, added to MediaStore. */
+    @SuppressWarnings("deprecation")
+    private static Uri copyIntoSoundsOld(ContentResolver cr, Uri source, String name, String mime, boolean alarm, String kind) throws Exception {
+        File dir = new File(Environment.getExternalStoragePublicDirectory(alarm ? Environment.DIRECTORY_ALARMS : Environment.DIRECTORY_NOTIFICATIONS), "AlPhi Cuts");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IllegalStateException("no folder");
+        File file = new File(dir, ("AlPhi Cuts " + kind + " " + System.currentTimeMillis() + " - " + name).replaceAll("[\\\\/:*?\"<>|]", "_"));
+        try (InputStream in = cr.openInputStream(source); OutputStream out = new FileOutputStream(file)) {
+            copy(in, out);
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+            throw e;
+        }
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.MediaColumns.DATA, file.getAbsolutePath());
+        v.put(MediaStore.MediaColumns.TITLE, name);
+        v.put(MediaStore.MediaColumns.DISPLAY_NAME, file.getName());
+        v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+        v.put(MediaStore.MediaColumns.SIZE, file.length());
+        v.put(alarm ? MediaStore.Audio.Media.IS_ALARM : MediaStore.Audio.Media.IS_NOTIFICATION, 1);
+        Uri row = cr.insert(MediaStore.Audio.Media.getContentUriForPath(file.getAbsolutePath()), v);
+        if (row == null) {
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+        }
+        return row;
+    }
+
+    private static void copy(InputStream in, OutputStream out) throws Exception {
+        if (in == null || out == null) throw new IllegalStateException("no stream");
+        byte[] buf = new byte[64 * 1024];
+        long copied = 0;
+        for (int n; (n = in.read(buf)) > 0; ) {
+            copied += n;
+            if (copied > MAX_FILE_BYTES) throw new IllegalStateException("too big");
+            out.write(buf, 0, n);
+        }
+    }
+
+    /**
+     * When the phone won't let the client hear this kind of alert (its volume is off, or the phone
+     * is on silent), a line saying so; otherwise "".
+     */
+    static String quietMessage(Context c, String kind) {
+        try {
+            AudioManager am = c.getSystemService(AudioManager.class);
+            if ("alarm".equals(kind)) {
+                return am.getStreamVolume(AudioManager.STREAM_ALARM) == 0
+                        ? "Your alarm volume is off, so you won't hear it. Turn it up in the phone's sound settings." : "";
+            }
+            if (am.getRingerMode() != AudioManager.RINGER_MODE_NORMAL) return "Your phone is on silent or vibrate, so you won't hear this sound.";
+            return am.getStreamVolume(AudioManager.STREAM_NOTIFICATION) == 0
+                    ? "Your notification volume is off, so you won't hear it. Turn it up in the phone's sound settings." : "";
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private static void removeCopied(Context c, String uri) {

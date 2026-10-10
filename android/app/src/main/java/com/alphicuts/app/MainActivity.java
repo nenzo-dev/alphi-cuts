@@ -47,6 +47,7 @@ public class MainActivity extends Activity {
     private static final int REQ_BACKGROUND_LOCATION = 14;
     private static final int REQ_PHONE_SOUND = 15;
     private static final int REQ_SOUND_FILE = 16;
+    private static final int REQ_STORAGE = 17;
 
     private static volatile boolean visible;
     private static volatile MainActivity current;
@@ -251,7 +252,7 @@ public class MainActivity extends Activity {
             if (resultCode != RESULT_OK || data == null || kind == null || !Sounds.isKind(kind)) return;
             if (requestCode == REQ_PHONE_SOUND) {
                 Sounds.applyPicked(this, kind, data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI));
-                soundsChanged(null);
+                soundsChanged(quietOr(kind, null));
                 Sounds.preview(this, kind);
             } else if (data.getData() != null) {
                 Uri source = data.getData();
@@ -259,7 +260,7 @@ public class MainActivity extends Activity {
                 new Thread(() -> {
                     String problem = Sounds.applyFile(getApplicationContext(), kind, source);
                     runOnUiThread(() -> {
-                        soundsChanged(problem);
+                        soundsChanged(quietOr(kind, problem));
                         if (problem == null) Sounds.preview(this, kind);
                     });
                 }).start();
@@ -425,6 +426,16 @@ public class MainActivity extends Activity {
             tellPage();
             return;
         }
+        if (requestCode == REQ_STORAGE) {
+            String kind = Store.getString(this, "soundPicking");
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED && kind != null && Sounds.isKind(kind)) {
+                openSoundFile(kind);
+            } else {
+                Store.remove(this, "soundPicking");
+                soundsChanged("Allow storage access so the app can save your sound file, then try again.");
+            }
+            return;
+        }
         if (requestCode != REQ_NOTIFICATIONS) return;
         Store.putInt(this, "askedNotifications", Store.getInt(this, "askedNotifications", 0) + 1);
         tellPage();
@@ -543,13 +554,43 @@ public class MainActivity extends Activity {
                     .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, current);
             startPicker(i, REQ_PHONE_SOUND, kind);
         } else if ("file".equals(choice)) {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*");
-            startPicker(i, REQ_SOUND_FILE, kind);
+            // Android 9 and older can only add a sound to the phone's sounds with the storage permission.
+            if (Build.VERSION.SDK_INT < 29 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                Store.putString(this, "soundPicking", kind);
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
+                return;
+            }
+            openSoundFile(kind);
         } else if ("default".equals(choice) || Sounds.isTone(choice)) {
             Sounds.apply(this, kind, choice, "");
-            soundsChanged(null);
+            soundsChanged(quietOr(kind, null));
             Sounds.preview(this, kind);
         }
+    }
+
+    /** The phone's file picker for audio, or any app that hands over files, for a sound of their own. */
+    private void openSoundFile(String kind) {
+        Store.putString(this, "soundPicking", kind);
+        Intent[] tries = {
+                new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*"),
+                new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*")};
+        for (Intent i : tries) {
+            try {
+                startActivityForResult(i, REQ_SOUND_FILE);
+                return;
+            } catch (ActivityNotFoundException ignored) {
+                // try the next way
+            }
+        }
+        Store.remove(this, "soundPicking");
+        soundsChanged("This phone has no app for choosing files. Choose one of the phone's sounds instead.");
+    }
+
+    /** "Sound set" can still be silent: say so when the volume is off or the phone is on silent. */
+    private String quietOr(String kind, String problem) {
+        if (problem != null && !problem.isEmpty()) return problem;
+        String quiet = Sounds.quietMessage(this, kind);
+        return quiet.isEmpty() ? null : quiet;
     }
 
     private void startPicker(Intent i, int request, String kind) {

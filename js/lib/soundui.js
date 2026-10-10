@@ -73,39 +73,53 @@ function appSounds() {
   try { return JSON.parse(app().sounds()) || {}; } catch { return {}; }
 }
 
+function appVersion() {
+  try { return JSON.parse(app().info()).version || ''; } catch { return ''; }
+}
+
 function appBody() {
   const a = app();
   if (!a || typeof a.setSound !== 'function') {
+    // An older app: choosing sounds needs 1.4.0 or later. The app updates itself from here.
+    const version = appVersion();
+    const update = a && typeof a.startUpdate === 'function'
+      ? '<button type="button" class="btn btn-gold btn-block" id="snd-update">Update the app</button>'
+      : '<a class="btn btn-gold btn-block" href="#get-app" id="snd-getapp">Get the newest app</a>';
     return `
-      <p>Update the app to choose its sounds here.</p>
+      <p>Choosing sounds right in the app needs the newest version of the app${version ? ` (this phone has ${esc(version)})` : ''}.</p>
+      ${update}
       <p class="snd-note small">Until then: open your phone's Settings, then Apps, AlPhi Cuts, Notifications. Tap <b>Your turn</b> and choose a sound.</p>`;
   }
   const now = appSounds();
   const rows = APP_CHANNELS.map(([kind, name, what]) => {
     const cur = now[kind] || { choice: 'default', label: '' };
     const picked = cur.choice === 'phone' || cur.choice === 'file';
+    const label = cur.label || (cur.choice === 'default' ? "The phone's usual sound" : 'Chosen sound');
     const options = [
-      ...(picked ? [['keep', `${cur.label || 'Chosen sound'} (${cur.choice === 'phone' ? "phone's sound" : 'your file'})`]] : []),
+      ...(picked ? [['keep', `${label} (${cur.choice === 'phone' ? "phone's sound" : 'your file'})`]] : []),
       ['default', "The phone's usual sound"],
       ...APP_TONES.map((t) => [t.id, t.name]),
-      ['phone', "Choose from the phone's sounds…"],
-      ...(now.ownFile ? [['file', 'My own sound file…']] : []),
     ];
     const selected = picked ? 'keep' : cur.choice;
     return `
-      <div class="snd-row">
-        <label for="snd-app-${kind}">${esc(name)}</label>
-        <p class="small muted snd-what">${esc(what)}</p>
-        <div class="snd-pick">
-          <select id="snd-app-${kind}" data-app-kind="${kind}">${options.map(([v, l]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <div class="snd-row snd-app-row">
+        <div class="snd-app-head">
+          <div><b>${esc(name)}</b><p class="small muted">${esc(what)}</p></div>
           <button type="button" class="btn btn-ghost btn-sm snd-play" data-app-play="${kind}" aria-label="Play: ${esc(name)}" title="Play">${PLAY}</button>
+        </div>
+        <p class="snd-now small">Now: <b>${esc(label)}</b></p>
+        <label class="sr-only" for="snd-app-${kind}">Tone for ${esc(name)}</label>
+        <select id="snd-app-${kind}" data-app-kind="${kind}">${options.map(([v, l]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
+        <div class="snd-app-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-app-pick="phone" data-for="${kind}">Phone's sounds</button>
+          ${now.ownFile ? `<button type="button" class="btn btn-ghost btn-sm" data-app-pick="file" data-for="${kind}">My own file</button>` : ''}
         </div>
       </div>`;
   }).join('');
   return `
-    <p class="small muted">Choose the sound for each kind of alert. Tap Play to hear it.</p>
+    <p class="small muted">Pick a tone, or open the phone's sounds or a song or sound file of your own. Tap Play to hear it.</p>
     ${rows}
-    <p class="snd-note small">The phone's sounds and your own file open right here in the app. Vibration and the rest: <button type="button" class="link-btn small" data-channel="alarm">more sound settings</button>.</p>`;
+    <p class="snd-note small">Vibration and the rest: <button type="button" class="link-btn small" data-channel="alarm">more sound settings</button>.</p>`;
 }
 
 /**
@@ -210,11 +224,22 @@ export async function openSounds({
         try { app().setSound(sel.dataset.appKind, sel.value); } catch { toast("Couldn't change the sound.", 'error'); }
       });
     });
-    root.querySelectorAll('[data-app-play]').forEach((btn) => {
+    root.querySelectorAll('[data-app-pick]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        try { app().playSound(btn.dataset.appPlay); } catch { /* older app */ }
+        try { app().setSound(btn.dataset.for, btn.dataset.appPick); } catch { toast("Couldn't open that.", 'error'); }
       });
     });
+    root.querySelectorAll('[data-app-play]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        let quiet = '';
+        try { quiet = app().playSound(btn.dataset.appPlay) || ''; } catch { /* older app */ }
+        if (quiet) toast(quiet, 'error');
+      });
+    });
+    const update = $('#snd-update');
+    if (update) update.addEventListener('click', () => { try { app().startUpdate(); close(); } catch { toast("Couldn't start the update.", 'error'); } });
+    const getApp = $('#snd-getapp');
+    if (getApp) getApp.addEventListener('click', close);
     root.querySelectorAll('[data-channel]').forEach((btn) => {
       btn.addEventListener('click', () => {
         try { app().openSoundSettings(btn.dataset.channel); } catch { toast("Couldn't open the phone's settings.", 'error'); }

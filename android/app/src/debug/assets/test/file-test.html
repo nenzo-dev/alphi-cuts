@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File test</title>
+</head>
+<body style="background:#171512;color:#f3efe6;font-family:sans-serif;padding:20px">
+<h2>File test (debug build only)</h2>
+<p>Opens the phone's file picker for the messages' sound, as "My own file" does in Sounds.</p>
+<script>
+  if (window.AlphiAndroid && window.AlphiAndroid.setSound) window.AlphiAndroid.setSound('messages', 'file');
+</script>
+</body>
+</html>

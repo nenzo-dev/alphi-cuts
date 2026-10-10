@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.10.4 (2026-10-10)
+
+The Android app goes to 1.4.1 (built, tested and published by GitHub Actions). No database change.
+
+- Sounds in the app is clearer: each alert shows what it plays now, a list of tones, and two
+  buttons, "Phone's sounds" (Android's sound list, opened in the app) and "My own file" (the
+  phone's file picker, for any song or sound file). Play warns when the phone is on silent or the
+  volume is off.
+- A sound file of your own now works on Android 7, 8 and 9 too: the app asks for storage access
+  once and saves the file among the phone's sounds. Phones without the usual file picker get any
+  other app that can hand over files.
+- An older app sees an "Update the app" button in Sounds instead of only being told to update.
+- The emulator test now does what a person would: it opens the phone's sound list from the app,
+  picks a sound and taps OK, and opens the phone's file picker from the app and picks an audio
+  file, and checks that each becomes that alert's sound (and that the file is saved among the
+  phone's sounds).
+
 ## 2.10.3 (2026-10-10)
 
 - A device with no real graphics chip (an emulator, or a browser drawing everything in software)

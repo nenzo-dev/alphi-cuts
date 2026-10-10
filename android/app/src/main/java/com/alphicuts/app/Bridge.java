@@ -106,10 +106,15 @@ final class Bridge {
         if (activity.isTrustedPage()) activity.runOnUiThread(() -> activity.setSound(kind, choice));
     }
 
-    /** Plays the sound chosen for that kind of alert for a few seconds. */
+    /**
+     * Plays the sound chosen for that kind of alert for a few seconds. Answers a line to show when
+     * the phone won't let it be heard (volume off, silent), else "".
+     */
     @JavascriptInterface
-    public void playSound(String kind) {
-        if (activity.isTrustedPage() && Sounds.isKind(kind)) activity.runOnUiThread(() -> Sounds.preview(activity, kind));
+    public String playSound(String kind) {
+        if (!activity.isTrustedPage() || !Sounds.isKind(kind)) return "";
+        activity.runOnUiThread(() -> Sounds.preview(activity, kind));
+        return Sounds.quietMessage(activity, kind);
     }
 
     @JavascriptInterface

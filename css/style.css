@@ -930,6 +930,13 @@ html.fx-lite .map-pic:hover img { transform: none; }
 .snd-row { margin: 14px 0 0; }
 .snd-row > label { display: block; margin: 0 0 6px; font-weight: 700; }
 .snd-what { margin: -4px 0 8px; }
+.snd-app-row { padding: 12px; border-radius: 12px; background: var(--glass-2); border: 1px solid var(--glass-line); }
+.snd-app-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.snd-app-head p { margin: 2px 0 0; }
+.snd-now { margin: 8px 0; }
+.snd-app-row select { width: 100%; margin: 0; }
+.snd-app-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.snd-app-actions .btn { flex: 1 1 130px; }
 .snd-pick { display: flex; gap: 10px; align-items: center; }
 .snd-pick select { flex: 1; min-width: 0; margin: 0; }
 .snd-play { flex-shrink: 0; width: 46px; height: 46px; min-height: 46px; padding: 0; border-radius: 50%; color: var(--gold-soft); }
