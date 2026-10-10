@@ -111,6 +111,8 @@ wait_for 180 dns_ok || echo "NOTE: the emulator still can't look up alphi-cuts.p
 adb logcat -c
 timeout 2400 adb logcat -v threadtime > "$OUT/logcat-stream.txt" 2>&1 &
 LOGCAT_PID=$!
+# Which emulator this was: its Android build and its built-in browser (the app's web view).
+{ adb shell getprop ro.build.fingerprint; adb shell getprop ro.product.model; adb shell dumpsys package com.google.android.webview | grep -m1 versionName; adb shell dumpsys package com.android.webview | grep -m1 versionName; } > "$OUT/device.txt" 2>&1
 
 # ---------------------------------------------------------------- 0. the app's web view, on a plain page
 # If the emulator stalls here too, the emulator itself is the problem, not the live site (a run on
