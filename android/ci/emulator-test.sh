@@ -297,6 +297,8 @@ fi
 # (b) "My own file": the phone's file picker opens in the app; an audio file picked there is saved
 #     among the phone's sounds and becomes the messages' sound.
 adb push android/app/src/main/res/raw/tone_bell_short.wav /sdcard/Download/ci-own-tone.wav >/dev/null
+# The app keeps one window: close it first, or the new test page goes to the open one and never loads.
+adb shell am force-stop "$DBG"
 adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/file-test.html >/dev/null
 files_up() { adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" | grep -qiE "documentsui|DocumentsActivity|PickActivity"; }
 pick_file() { tap_text "ci-own-tone.wav"; }
