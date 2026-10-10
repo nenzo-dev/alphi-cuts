@@ -11,14 +11,16 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const mouse = matchMedia('(hover: hover) and (pointer: fine)').matches;
 // Phones with very little memory or very few cores get a lighter version: fewer photos, no blur.
 const lite = (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
+// No real graphics chip (js/soft-graphics.js decided before the page was drawn): no ring, nothing moving.
+const soft = root.classList.contains('fx-soft');
 
 root.classList.add('fx');
 if (lite) root.classList.add('fx-lite');
 
-mountShowcase({ count: lite ? 8 : 12, quiet: !document.querySelector('.hero'), still: reduceMotion });
+if (!soft) mountShowcase({ count: lite ? 8 : 12, quiet: !document.querySelector('.hero'), still: reduceMotion });
 watchForUpdates();
 
-if (!reduceMotion) {
+if (!reduceMotion && !soft) {
   if (mouse) followTheMouse();
   glowWhereTapped();
   lightUpSections();

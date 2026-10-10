@@ -86,6 +86,17 @@ dns_ok() { adb shell "ping -c 1 -W 2 alphi-cuts.pages.dev" 2>&1 | grep -q "^PING
 wait_for 180 dns_ok || echo "NOTE: the emulator still can't look up alphi-cuts.pages.dev" | tee -a "$OUT/results.txt"
 adb logcat -c
 
+# ---------------------------------------------------------------- 0. the app's web view, on a plain page
+# If the emulator stalls here too, the emulator itself is the problem, not the live site (a run on
+# 2026-10-10 stalled two seconds after the release build opened the live site).
+DEBUG=$(ls "$APKS"/debug/*.apk 2>/dev/null | head -1)
+if [ -n "$DEBUG" ] && adb install -r "$DEBUG"; then
+  adb shell am start -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/plain.html
+  sleep 8
+  if [ "$(adb shell echo alive | tr -d '\r')" = alive ]; then pass "the app's web view opens a plain page and the emulator keeps answering"; fi
+  adb shell am force-stop "$DBG"
+fi
+
 # ---------------------------------------------------------------- 1. release build opens the site
 RELEASE=$(ls "$APKS"/release/*.apk 2>/dev/null | head -1)
 if [ -n "$RELEASE" ] && adb install -r "$RELEASE"; then pass "release APK installs"; else fail "release APK did not install"; fi

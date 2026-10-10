@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.10.3 (2026-10-10)
+
+- A device with no real graphics chip (an emulator, or a browser drawing everything in software)
+  gets a still, flat page: no moving 3D ring, no blur, no animations. A tiny script at the top of
+  each page (js/soft-graphics.js) decides before the page is drawn. Real phones and computers keep
+  the full look. The Android emulator test froze two seconds after the app opened the live site;
+  this keeps the site from overloading a software-drawn screen.
+- The emulator test first opens a plain page in the app, to tell a stalled emulator from a page
+  that is too much for it.
+
 ## 2.10.2 (2026-10-10)
 
 The Android app goes to 1.4.0 (built, tested and published by GitHub Actions). No database change.

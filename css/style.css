@@ -967,6 +967,14 @@ html.fx-past-hero .cuts-ring, html.fx-past-hero .cuts-3d .orb, html.fx-past-hero
   .site-header { background: rgba(16, 14, 12, .82); }
 }
 
+/* No real graphics chip (an emulator, or a browser drawing in software; js/soft-graphics.js): a still,
+   flat page. Moving 3D, blur and endless animations drawn in software can stall the whole device. */
+html.fx-soft *, html.fx-soft *::before, html.fx-soft *::after {
+  animation: none !important; transition: none !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+html.fx-soft .hero h1 { background: none; color: var(--gold-soft); -webkit-background-clip: border-box; background-clip: border-box; }
+
 @media print {
   .notify-dock, .bell-btn { display: none !important; }
   .cuts-3d, .cursor-glow, .cursor-ring, .tap-glow { display: none !important; }
