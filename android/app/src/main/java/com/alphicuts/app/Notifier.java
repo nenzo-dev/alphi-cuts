@@ -7,7 +7,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Icon;
-import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -35,23 +34,25 @@ final class Notifier {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = c.getSystemService(NotificationManager.class);
 
-        NotificationChannel alarm = new NotificationChannel(CH_ALARM, "Your turn", NotificationManager.IMPORTANCE_HIGH);
+        // The three alerts with a sound the client can choose live on channels named by Sounds.
+        NotificationChannel alarm = new NotificationChannel(Sounds.channel(c, "alarm"), "Your turn", NotificationManager.IMPORTANCE_HIGH);
         alarm.setDescription("Rings when your slot starts or the barber calls you");
-        alarm.setSound(alarmSound(), new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build());
+        alarm.setSound(Sounds.uri(c, "alarm"), Sounds.attributes("alarm"));
         alarm.enableVibration(true);
         alarm.setVibrationPattern(ALARM_VIBRATION);
         alarm.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         alarm.setBypassDnd(true);
 
-        NotificationChannel updates = new NotificationChannel(CH_UPDATES, "Booking updates", NotificationManager.IMPORTANCE_HIGH);
+        NotificationChannel updates = new NotificationChannel(Sounds.channel(c, "updates"), "Booking updates", NotificationManager.IMPORTANCE_HIGH);
         updates.setDescription("Heads-up before your slot and when you're nearly up");
         updates.enableVibration(true);
+        Uri updatesSound = Sounds.uri(c, "updates");
+        if (updatesSound != null) updates.setSound(updatesSound, Sounds.attributes("updates"));
 
-        NotificationChannel messages = new NotificationChannel(CH_MESSAGES, "Messages", NotificationManager.IMPORTANCE_DEFAULT);
+        NotificationChannel messages = new NotificationChannel(Sounds.channel(c, "messages"), "Messages", NotificationManager.IMPORTANCE_DEFAULT);
         messages.setDescription("Replies from the barber");
+        Uri messagesSound = Sounds.uri(c, "messages");
+        if (messagesSound != null) messages.setSound(messagesSound, Sounds.attributes("messages"));
 
         NotificationChannel watching = new NotificationChannel(CH_WATCH, "Booking watch", NotificationManager.IMPORTANCE_LOW);
         watching.setDescription("Shown while the app keeps an eye on your booking");
@@ -80,7 +81,9 @@ final class Notifier {
 
     @SuppressWarnings("deprecation")
     private static Notification.Builder builder(Context c, String channel) {
-        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, channel) : new Notification.Builder(c);
+        String kind = Sounds.kindOf(channel);
+        String live = kind == null ? channel : Sounds.channel(c, kind); // the channel with the client's sound
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, live) : new Notification.Builder(c);
         return b.setSmallIcon(R.drawable.ic_stat_bell).setColor(GOLD).setShowWhen(true);
     }
 
@@ -137,7 +140,7 @@ final class Notifier {
                         "Stop alarm", receiverIntent(c, AlarmReceiver.ACTION_STOP, token)).build());
         if (Build.VERSION.SDK_INT < 26) {
             b.setPriority(Notification.PRIORITY_MAX)
-                    .setSound(alarmSound(), new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
+                    .setSound(Sounds.uri(c, "alarm"), Sounds.attributes("alarm"))
                     .setVibrate(ALARM_VIBRATION);
         }
         Notification n = b.build();
@@ -203,16 +206,23 @@ final class Notifier {
         post(c, CH_MESSAGES, 2, "New message from " + who, "Open the app to read it.");
     }
 
+    @SuppressWarnings("deprecation")
     private static void post(Context c, String channel, int id, String title, String body) {
         channels(c);
-        Notification n = builder(c, channel)
+        Notification.Builder b = builder(c, channel)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(new Notification.BigTextStyle().bigText(body))
                 .setContentIntent(openApp(c, id))
-                .setAutoCancel(true)
-                .build();
-        c.getSystemService(NotificationManager.class).notify(id, n);
+                .setAutoCancel(true);
+        if (Build.VERSION.SDK_INT < 26) {
+            // No channels before Android 8: each notification carries its sound.
+            String kind = Sounds.kindOf(channel);
+            Uri sound = kind == null ? null : Sounds.uri(c, kind);
+            if (sound != null) b.setSound(sound, Sounds.attributes(kind));
+            else b.setDefaults(Notification.DEFAULT_SOUND);
+        }
+        c.getSystemService(NotificationManager.class).notify(id, b.build());
     }
 
     /** A newer version is out: tapping it, or its Update button, opens the app and starts the update. */

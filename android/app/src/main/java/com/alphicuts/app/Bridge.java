@@ -92,4 +92,28 @@ final class Bridge {
     public void openSoundSettings(String which) {
         if (activity.isTrustedPage()) activity.runOnUiThread(() -> activity.openSoundSettings(which));
     }
+
+    /** The chosen sound for each kind of alert: {alarm: {choice, label}, updates: ..., messages: ..., ownFile}. */
+    @JavascriptInterface
+    public String sounds() {
+        if (!activity.isTrustedPage()) return "{}";
+        return Sounds.describe(activity).toString();
+    }
+
+    /** Chooses the sound for "alarm", "updates" or "messages": a tone id, "default", "phone" or "file". */
+    @JavascriptInterface
+    public void setSound(String kind, String choice) {
+        if (activity.isTrustedPage()) activity.runOnUiThread(() -> activity.setSound(kind, choice));
+    }
+
+    /** Plays the sound chosen for that kind of alert for a few seconds. */
+    @JavascriptInterface
+    public void playSound(String kind) {
+        if (activity.isTrustedPage() && Sounds.isKind(kind)) activity.runOnUiThread(() -> Sounds.preview(activity, kind));
+    }
+
+    @JavascriptInterface
+    public void stopSound() {
+        activity.runOnUiThread(Sounds::stopPreview);
+    }
 }

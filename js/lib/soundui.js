@@ -3,8 +3,9 @@
 // In a browser the site makes the sounds itself while it's open, so people pick a tone for "it's your
 // turn" and one for heads-ups and messages, or use a sound file of their own (kept on the device).
 // With the site closed, notifications use the phone's own sound, which websites can't change, so
-// the panel says where to change it. Inside the Android app each kind of alert is a notification
-// channel, and the buttons open the phone's own sound picker for it (AlphiAndroid.openSoundSettings).
+// the panel says where to change it. Inside the Android app (1.4.0) each kind of alert (your turn,
+// booking updates, messages) has its own list: the phone's usual sound, the same six tones, the
+// phone's own sounds or a sound file, all chosen right in the app (AlphiAndroid.setSound).
 import { $, esc, toast } from './ui.js';
 import {
   SOUND_CHOICES, chosenSound, chooseSound, previewSound, stopPreview, saveCustomSound, removeCustomSound,
@@ -64,20 +65,47 @@ function browserBody({ kinds, labels, place }) {
     <p class="snd-note small">${esc(closedNote(place))}</p>`;
 }
 
+// The app (1.4.0 and later) plays its alerts itself, so it gets the same six tones (bundled in the app),
+// the phone's own sounds (Android's picker, opened in the app) and a sound file of the client's own.
+const APP_TONES = SOUND_CHOICES.filter((c) => c.id !== 'custom');
+
+function appSounds() {
+  try { return JSON.parse(app().sounds()) || {}; } catch { return {}; }
+}
+
 function appBody() {
   const a = app();
-  if (!a || typeof a.openSoundSettings !== 'function') {
+  if (!a || typeof a.setSound !== 'function') {
     return `
       <p>Update the app to choose its sounds here.</p>
       <p class="snd-note small">Until then: open your phone's Settings, then Apps, AlPhi Cuts, Notifications. Tap <b>Your turn</b> and choose a sound.</p>`;
   }
+  const now = appSounds();
+  const rows = APP_CHANNELS.map(([kind, name, what]) => {
+    const cur = now[kind] || { choice: 'default', label: '' };
+    const picked = cur.choice === 'phone' || cur.choice === 'file';
+    const options = [
+      ...(picked ? [['keep', `${cur.label || 'Chosen sound'} (${cur.choice === 'phone' ? "phone's sound" : 'your file'})`]] : []),
+      ['default', "The phone's usual sound"],
+      ...APP_TONES.map((t) => [t.id, t.name]),
+      ['phone', "Choose from the phone's sounds…"],
+      ...(now.ownFile ? [['file', 'My own sound file…']] : []),
+    ];
+    const selected = picked ? 'keep' : cur.choice;
+    return `
+      <div class="snd-row">
+        <label for="snd-app-${kind}">${esc(name)}</label>
+        <p class="small muted snd-what">${esc(what)}</p>
+        <div class="snd-pick">
+          <select id="snd-app-${kind}" data-app-kind="${kind}">${options.map(([v, l]) => `<option value="${v}"${v === selected ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
+          <button type="button" class="btn btn-ghost btn-sm snd-play" data-app-play="${kind}" aria-label="Play: ${esc(name)}" title="Play">${PLAY}</button>
+        </div>
+      </div>`;
+  }).join('');
   return `
-    <p class="small muted">Choose the sound your phone plays for each kind of alert. Your phone's sound settings open. Tap Sound there.</p>
-    ${APP_CHANNELS.map(([id, name, what]) => `
-      <div class="snd-row snd-app">
-        <div><b>${esc(name)}</b><p class="small muted">${esc(what)}</p></div>
-        <button type="button" class="btn btn-ghost btn-sm" data-channel="${id}">Choose sound</button>
-      </div>`).join('')}`;
+    <p class="small muted">Choose the sound for each kind of alert. Tap Play to hear it.</p>
+    ${rows}
+    <p class="snd-note small">The phone's sounds and your own file open right here in the app. Vibration and the rest: <button type="button" class="link-btn small" data-channel="alarm">more sound settings</button>.</p>`;
 }
 
 /**
@@ -109,10 +137,19 @@ export async function openSounds({
     wire();
   };
 
+  // The app says when a sound changed (after its picker, or with a problem to show).
+  const onAppSounds = (e) => {
+    if (!root.querySelector('.sounds-panel')) return;
+    const problem = e && e.detail;
+    render();
+    toast(problem || 'Your sound is set.', problem ? 'error' : 'ok');
+  };
   const close = () => {
     stopPreview();
+    try { if (app() && app().stopSound) app().stopSound(); } catch { /* older app */ }
     root.innerHTML = '';
     document.removeEventListener('keydown', onKey);
+    window.removeEventListener('alphisounds', onAppSounds);
     if (last && last.focus) last.focus();
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -150,7 +187,7 @@ export async function openSounds({
         previewSound(sel.value, kind);
       });
     });
-    root.querySelectorAll('.snd-play').forEach((btn) => {
+    root.querySelectorAll('.snd-play[data-kind]').forEach((btn) => { // the website's own sounds (not the app's)
       btn.addEventListener('click', () => {
         unlockAudio();
         const kind = btn.dataset.kind;
@@ -167,6 +204,17 @@ export async function openSounds({
         toast('Your own sound is removed. The usual sounds play again.');
       });
     }
+    root.querySelectorAll('select[data-app-kind]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        if (sel.value === 'keep') return;
+        try { app().setSound(sel.dataset.appKind, sel.value); } catch { toast("Couldn't change the sound.", 'error'); }
+      });
+    });
+    root.querySelectorAll('[data-app-play]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        try { app().playSound(btn.dataset.appPlay); } catch { /* older app */ }
+      });
+    });
     root.querySelectorAll('[data-channel]').forEach((btn) => {
       btn.addEventListener('click', () => {
         try { app().openSoundSettings(btn.dataset.channel); } catch { toast("Couldn't open the phone's settings.", 'error'); }
@@ -177,5 +225,6 @@ export async function openSounds({
   }
 
   document.addEventListener('keydown', onKey);
+  window.addEventListener('alphisounds', onAppSounds);
   render();
 }

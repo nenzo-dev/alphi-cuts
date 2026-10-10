@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -44,6 +45,8 @@ public class MainActivity extends Activity {
     private static final int REQ_NOTIFICATIONS = 11;
     private static final int REQ_LOCATION = 13;
     private static final int REQ_BACKGROUND_LOCATION = 14;
+    private static final int REQ_PHONE_SOUND = 15;
+    private static final int REQ_SOUND_FILE = 16;
 
     private static volatile boolean visible;
     private static volatile MainActivity current;
@@ -235,11 +238,32 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_FILE && fileCallback != null) {
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
             fileCallback = null;
+        }
+        if (requestCode == REQ_PHONE_SOUND || requestCode == REQ_SOUND_FILE) {
+            String kind = Store.getString(this, "soundPicking");
+            Store.remove(this, "soundPicking");
+            if (resultCode != RESULT_OK || data == null || kind == null || !Sounds.isKind(kind)) return;
+            if (requestCode == REQ_PHONE_SOUND) {
+                Sounds.applyPicked(this, kind, data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI));
+                soundsChanged(null);
+                Sounds.preview(this, kind);
+            } else if (data.getData() != null) {
+                Uri source = data.getData();
+                Toast.makeText(this, "Saving your sound…", Toast.LENGTH_SHORT).show();
+                new Thread(() -> {
+                    String problem = Sounds.applyFile(getApplicationContext(), kind, source);
+                    runOnUiThread(() -> {
+                        soundsChanged(problem);
+                        if (problem == null) Sounds.preview(this, kind);
+                    });
+                }).start();
+            }
         }
     }
 
@@ -282,6 +306,7 @@ public class MainActivity extends Activity {
                     .put("location", Arrival.hasLocation(this)).put("background", Arrival.hasBackground(this)));
             // Each kind of alert has its own sound, chosen in the phone's settings (openSoundSettings).
             o.put("sounds", Build.VERSION.SDK_INT >= 26);
+            o.put("soundChoice", true); // the Sounds panel can choose sounds in the app (setSound)
         } catch (Exception ignored) {
             // leave whatever was filled in
         }
@@ -479,9 +504,8 @@ public class MainActivity extends Activity {
      * one place it can be changed.
      */
     void openSoundSettings(String which) {
-        String channel = "updates".equals(which) ? Notifier.CH_UPDATES
-                : "messages".equals(which) ? Notifier.CH_MESSAGES : Notifier.CH_ALARM;
         Notifier.channels(this);
+        String channel = Sounds.channel(this, Sounds.isKind(which) ? which : "alarm");
         Intent[] tries = Build.VERSION.SDK_INT >= 26
                 ? new Intent[]{
                         new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
@@ -500,6 +524,47 @@ public class MainActivity extends Activity {
             }
         }
         Toast.makeText(this, "Open Settings, then Apps, AlPhi Cuts, Notifications.", Toast.LENGTH_LONG).show();
+    }
+
+    // ---------------------------------------------------------------- the client's own sounds (Sounds.java)
+    /**
+     * From the website's Sounds panel: "default" or one of the website's tones is used straight away;
+     * "phone" opens Android's sound picker and "file" lets the client choose a sound file.
+     */
+    void setSound(String kind, String choice) {
+        if (!Sounds.isKind(kind) || choice == null) return;
+        if ("phone".equals(choice)) {
+            Uri current = Sounds.uri(this, kind);
+            Intent i = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, "alarm".equals(kind) ? RingtoneManager.TYPE_ALARM : RingtoneManager.TYPE_NOTIFICATION)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "alarm".equals(kind) ? "Sound for Your turn" : "updates".equals(kind) ? "Sound for booking updates" : "Sound for messages")
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, current);
+            startPicker(i, REQ_PHONE_SOUND, kind);
+        } else if ("file".equals(choice)) {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*");
+            startPicker(i, REQ_SOUND_FILE, kind);
+        } else if ("default".equals(choice) || Sounds.isTone(choice)) {
+            Sounds.apply(this, kind, choice, "");
+            soundsChanged(null);
+            Sounds.preview(this, kind);
+        }
+    }
+
+    private void startPicker(Intent i, int request, String kind) {
+        Store.putString(this, "soundPicking", kind);
+        try {
+            startActivityForResult(i, request);
+        } catch (ActivityNotFoundException e) {
+            Store.remove(this, "soundPicking");
+            openSoundSettings(kind); // no picker on this phone: its own settings for that alert
+        }
+    }
+
+    /** Tells the website the sounds changed (it redraws the panel), with a message if something failed. */
+    void soundsChanged(String problem) {
+        runJs("window.dispatchEvent(new CustomEvent('alphisounds',{detail:" + JSONObject.quote(problem == null ? "" : problem) + "}))");
     }
 
     void printPage() {
@@ -538,6 +603,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        Sounds.stopPreview();
         visible = false;
         if (!printing) {
             web.onPause();

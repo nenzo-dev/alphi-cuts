@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sound test</title>
+</head>
+<body style="background:#171512;color:#f3efe6;font-family:sans-serif;padding:20px">
+<h2>Sound test (debug build only)</h2>
+<p>Opens the phone's sound list for booking updates, as "Choose from the phone's sounds" does in Sounds.</p>
+<script>
+  if (window.AlphiAndroid && window.AlphiAndroid.setSound) window.AlphiAndroid.setSound('updates', 'phone');
+</script>
+</body>
+</html>

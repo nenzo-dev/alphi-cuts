@@ -33,6 +33,14 @@
   let out = 'bridge: ' + typeof window.AlphiAndroid + '\n';
   try {
     out += 'info: ' + window.AlphiAndroid.info() + '\n';
+    // Sounds chosen in the app: the bell for "your turn" (the alarm below rings with it) and the
+    // marimba for booking updates (the heads-up).
+    if (window.AlphiAndroid.setSound) {
+      window.AlphiAndroid.setSound('alarm', 'bell');
+      window.AlphiAndroid.setSound('updates', 'marimba');
+      out += 'sounds chosen\n';
+      setTimeout(() => { document.getElementById('out').textContent += 'sounds: ' + window.AlphiAndroid.sounds() + '\n'; }, 1500);
+    }
     window.AlphiAndroid.syncBookings(JSON.stringify(payload));
     out += 'synced; slot starts ' + new Date(start).toISOString() + '\n';
     if (window.AlphiAndroid.enableArrival) { window.AlphiAndroid.enableArrival(); out += 'arrival on\n'; }

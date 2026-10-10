@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.10.2 (2026-10-10)
+
+The Android app goes to 1.4.0 (built, tested and published by GitHub Actions). No database change.
+
+- In the app, Sounds now chooses each alert's sound right in the app: for Your turn, Booking
+  updates and Messages, pick the phone's usual sound, one of the website's six tones (now built
+  into the app, made by tools/make_tones.py from the same notes), any of the phone's own sounds
+  (Android's sound list opens in the app), or a sound file of your own (Android 10 and later; it's
+  copied into the phone's sounds under "AlPhi Cuts" so Android can play it). Each has a Play
+  button, and the choice takes effect straight away.
+- The emulator test checks it: the alarm and the heads-up move to channels with the chosen tones,
+  the alarm rings on the new channel, and the phone's sound list opens in the app. The test no
+  longer waits for the app's first frame, and a slow screenshot is only noted.
+
 ## 2.10.1 (2026-10-07)
 
 - Photos and icons stay saved on the phone across releases, so a new version no longer downloads

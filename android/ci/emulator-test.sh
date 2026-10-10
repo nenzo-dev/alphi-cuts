@@ -10,6 +10,9 @@
 #  3. The app updates itself from a local server standing in for the website. First with
 #     "Install unknown apps" off: the app must say so and "Open settings" must open that setting.
 #     Once it's on, the update carries on by itself, and Android's installer replaces the app.
+#  4. Sounds: the test page chooses the bell for "your turn" and the marimba for heads-ups (their
+#     channels must carry the app's tones, and the alarm must ring on the new channel), and at the
+#     end "Choose from the phone's sounds" must open Android's sound list in the app.
 #
 # Screenshots, logs and results.txt go to ci-results/.
 set -u
@@ -42,7 +45,8 @@ adb() {
 
 pass() { echo "PASS: $1" | tee -a "$OUT/results.txt"; }
 fail() { echo "FAIL: $1" | tee -a "$OUT/results.txt"; echo "::error::$1"; FAILED=1; }
-shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
+# A screenshot that takes too long is only noted: it shouldn't stop the run. (`timeout` runs the real adb.)
+shot() { timeout 60 adb exec-out screencap -p > "$OUT/$1.png" || echo "NOTE: screenshot $1 took too long" | tee -a "$OUT/results.txt"; }
 notifications() { adb shell dumpsys notification --noredact; }
 # wait_for SECONDS COMMAND...: retry every 2 s until COMMAND succeeds
 wait_for() {
@@ -86,14 +90,17 @@ adb logcat -c
 RELEASE=$(ls "$APKS"/release/*.apk 2>/dev/null | head -1)
 if [ -n "$RELEASE" ] && adb install -r "$RELEASE"; then pass "release APK installs"; else fail "release APK did not install"; fi
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
-adb shell am start -W -n "$PKG/.MainActivity"
+# Started without -W: the check below waits for the page itself, not for the first frame.
+adb shell am start -n "$PKG/.MainActivity"
 # The first load on a fresh emulator can be slow: wait for the site (or the offline page).
 release_loaded() { adb logcat -d -s AlPhiCuts:V | grep -qE "Loaded https://alphi-cuts.pages.dev/|offline page"; }
 wait_for 90 release_loaded
 sleep 3
-shot 01-release-home
 if adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$PKG/"; then pass "app opens and stays open"; else fail "app did not stay open"; fi
 adb logcat -d -s AlPhiCuts:V > "$OUT/release-log.txt"
+# What the emulator is busy with while the live site is open (two runs hung here on 2026-10-07).
+timeout 30 adb shell top -b -n 1 -m 12 > "$OUT/top-release.txt" 2>&1
+shot 01-release-home
 if grep -qF "Loaded https://alphi-cuts.pages.dev/" "$OUT/release-log.txt" && ! grep -qF "offline page" "$OUT/release-log.txt"; then
   pass "live website shows inside the app"
 else
@@ -123,6 +130,20 @@ grep -qF "com.alphicuts.app.DUE" "$OUT/alarms.txt" && pass "slot alarm is set" |
 grep -qF "com.alphicuts.app.REMINDER" "$OUT/alarms.txt" && pass "heads-up alarm is set" || fail "heads-up alarm was not set"
 adb shell dumpsys activity services "$DBG" > "$OUT/services.txt"
 grep -qF "WatchService" "$OUT/services.txt" && pass "booking watcher is running" || fail "booking watcher is not running"
+
+# Sounds chosen in the app (the test page picked the bell and the marimba): each alert moves to a
+# fresh channel that carries the app's own tone.
+adb shell dumpsys notification --noredact > "$OUT/channels.txt"
+if grep -E "mId='booking_alarm_1'" "$OUT/channels.txt" | grep -qF "mSound=android.resource://$DBG/"; then
+  pass "the alarm's sound can be chosen in the app"
+else
+  fail "choosing the alarm's sound in the app did not change it"
+fi
+if grep -E "mId='booking_updates_1'" "$OUT/channels.txt" | grep -qF "mSound=android.resource://$DBG/"; then
+  pass "the heads-up's sound can be chosen in the app"
+else
+  fail "choosing the heads-up's sound in the app did not change it"
+fi
 
 
 # Close the app completely: leave it, then kill its process. Alarms live in the system, not the app.
@@ -157,6 +178,7 @@ sleep 4
 notifications > "$OUT/notifications-alarm.txt"
 shot 03-alarm-lock-screen
 if grep -qE "fullscreenIntent=PendingIntent" "$OUT/notifications-alarm.txt"; then pass "alarm uses a full-screen alert"; else fail "alarm has no full-screen alert"; fi
+if grep -qF "booking_alarm_1" "$OUT/notifications-alarm.txt"; then pass "the alarm rings with the sound chosen in the app"; else fail "the alarm did not use the chosen sound"; fi
 if wait_for 20 alarm_screen_up; then pass "alarm screen shows over the lock screen"; else fail "alarm screen did not show"; fi
 
 if tap_text "Stop alarm"; then
@@ -225,6 +247,13 @@ fi
 shot 08-after-update
 adb logcat -d -s AlPhiCuts:V > "$OUT/update-log.txt"
 kill "$SERVER" 2>/dev/null
+
+# ---------------------------------------------------------------- 4. the phone's sounds, picked in the app
+adb shell am start -W -n "$DBG/com.alphicuts.app.MainActivity" --es testUrl file:///android_asset/test/sound-test.html >/dev/null
+picker_up() { adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" | grep -qiE "RingtonePicker|soundpicker"; }
+if wait_for 30 picker_up; then pass "the phone's sound list opens in the app"; else fail "the phone's sound list did not open in the app"; fi
+shot 09-sound-picker
+adb shell input keyevent KEYCODE_BACK
 
 adb logcat -d -b crash > "$OUT/crashes.txt" 2>/dev/null
 if grep -qF "alphicuts" "$OUT/crashes.txt"; then fail "the app crashed (see crashes.txt)"; else pass "no crashes"; fi
