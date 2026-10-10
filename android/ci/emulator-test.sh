@@ -320,7 +320,8 @@ if wait_for 30 files_up; then
     fail "the audio file picked in the app was not used"
     shot 11-file-picker-after
   fi
-  if adb shell ls "/sdcard/Notifications/AlPhi Cuts/" 2>/dev/null | grep -qF "ci-own-tone"; then
+  # Quoted twice: the device's own shell must see the folder name with its space as one word.
+  if adb shell "ls '/sdcard/Notifications/AlPhi Cuts/'" 2>/dev/null | grep -qF "ci-own-tone"; then
     pass "the file is saved among the phone's sounds (Notifications/AlPhi Cuts)"
   else
     fail "the file was not saved among the phone's sounds"
