@@ -28,14 +28,26 @@ FAILED=0
 # answering, the run stops within minutes and says which command hung, instead of sitting until the
 # job's 35-minute limit cancels it with no results (two runs on 2026-10-07 hung after the install).
 MAIN=$$
-trap 'exit 1' TERM
+LIVE_SITE=0   # 1 during the last section (the live website in the app)
+finish() {
+  [ -n "${LOGCAT_PID:-}" ] && kill "$LOGCAT_PID" 2>/dev/null
+  [ -f "$OUT/logcat-stream.txt" ] && tail -n 3000 "$OUT/logcat-stream.txt" > "$OUT/logcat-last.txt" && rm -f "$OUT/logcat-stream.txt"
+  echo
+  cat "$OUT/results.txt"
+}
+trap 'finish; exit 1' TERM
+trap 'finish; exit $FAILED' USR1
 adb() {
   local limit=150
   [ "${1:-}" = install ] && limit=300
   echo "$(date -u +%H:%M:%S) adb $*" >> "$OUT/adb-log.txt"
   timeout "$limit" adb "$@"   # `timeout` runs the real adb, not this function
   local rc=$?
-  if [ "$rc" -eq 124 ]; then
+  if [ "$rc" -eq 124 ] && [ "$LIVE_SITE" = 1 ]; then
+    echo "NOTE: the emulator froze while the app showed the live website (adb $* took over $limit s). It draws the screen in software; phones don't. Every check above ran first. See logcat-last.txt." | tee -a "$OUT/results.txt"
+    echo "::warning::The emulator froze on the live website: adb $*"
+    kill -USR1 "$MAIN"
+  elif [ "$rc" -eq 124 ]; then
     echo "FAIL: the emulator stopped answering (adb $* took over $limit s)" | tee -a "$OUT/results.txt"
     echo "::error::The emulator stopped answering: adb $*"
     kill -TERM "$MAIN"
@@ -85,6 +97,8 @@ adb shell wm dismiss-keyguard
 dns_ok() { adb shell "ping -c 1 -W 2 alphi-cuts.pages.dev" 2>&1 | grep -q "^PING"; }
 wait_for 180 dns_ok || echo "NOTE: the emulator still can't look up alphi-cuts.pages.dev" | tee -a "$OUT/results.txt"
 adb logcat -c
+timeout 2400 adb logcat -v threadtime > "$OUT/logcat-stream.txt" 2>&1 &
+LOGCAT_PID=$!
 
 # ---------------------------------------------------------------- 0. the app's web view, on a plain page
 # If the emulator stalls here too, the emulator itself is the problem, not the live site (a run on
@@ -97,28 +111,9 @@ if [ -n "$DEBUG" ] && adb install -r "$DEBUG"; then
   adb shell am force-stop "$DBG"
 fi
 
-# ---------------------------------------------------------------- 1. release build opens the site
+# ---------------------------------------------------------------- 1. the release build installs
 RELEASE=$(ls "$APKS"/release/*.apk 2>/dev/null | head -1)
 if [ -n "$RELEASE" ] && adb install -r "$RELEASE"; then pass "release APK installs"; else fail "release APK did not install"; fi
-adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
-# Started without -W: the check below waits for the page itself, not for the first frame.
-adb shell am start -n "$PKG/.MainActivity"
-# The first load on a fresh emulator can be slow: wait for the site (or the offline page).
-release_loaded() { adb logcat -d -s AlPhiCuts:V | grep -qE "Loaded https://alphi-cuts.pages.dev/|offline page"; }
-wait_for 90 release_loaded
-sleep 3
-if adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$PKG/"; then pass "app opens and stays open"; else fail "app did not stay open"; fi
-adb logcat -d -s AlPhiCuts:V > "$OUT/release-log.txt"
-# What the emulator is busy with while the live site is open (two runs hung here on 2026-10-07).
-timeout 30 adb shell top -b -n 1 -m 12 > "$OUT/top-release.txt" 2>&1
-shot 01-release-home
-if grep -qF "Loaded https://alphi-cuts.pages.dev/" "$OUT/release-log.txt" && ! grep -qF "offline page" "$OUT/release-log.txt"; then
-  pass "live website shows inside the app"
-else
-  fail "live website did not show inside the app"
-fi
-adb shell input keyevent KEYCODE_HOME
-adb shell am force-stop "$PKG"   # frees its memory for the rest of the test
 
 # ---------------------------------------------------------------- 2. alarm rings with the app closed
 DEBUG=$(ls "$APKS"/debug/*.apk 2>/dev/null | head -1)
@@ -270,6 +265,30 @@ adb logcat -d -b crash > "$OUT/crashes.txt" 2>/dev/null
 if grep -qF "alphicuts" "$OUT/crashes.txt"; then fail "the app crashed (see crashes.txt)"; else pass "no crashes"; fi
 adb logcat -d | grep -iE "alphicuts|AndroidRuntime" | tail -400 > "$OUT/logcat.txt"
 
-echo
-cat "$OUT/results.txt"
+# ---------------------------------------------------------------- 5. the live website in the app (last)
+# Last, because the emulator has frozen here since 2026-10-07 (it draws the screen in software) and
+# nothing can run after a freeze. A freeze here is noted; a page that does not load still fails.
+LIVE_SITE=1
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS
+# Started without -W: the check below waits for the page itself, not for the first frame.
+adb shell am start -n "$PKG/.MainActivity"
+# The first load on a fresh emulator can be slow: wait for the site (or the offline page).
+release_loaded() { adb logcat -d -s AlPhiCuts:V | grep -qE "Loaded https://alphi-cuts.pages.dev/|offline page"; }
+wait_for 90 release_loaded
+sleep 3
+if adb shell dumpsys window | grep -E "mCurrentFocus" | grep -q "$PKG/"; then pass "app opens and stays open"; else fail "app did not stay open"; fi
+adb logcat -d -s AlPhiCuts:V > "$OUT/release-log.txt"
+# What the emulator is busy with while the live site is open (two runs hung here on 2026-10-07).
+timeout 30 adb shell top -b -n 1 -m 12 > "$OUT/top-release.txt" 2>&1
+shot 01-release-home
+if grep -qF "Loaded https://alphi-cuts.pages.dev/" "$OUT/release-log.txt" && ! grep -qF "offline page" "$OUT/release-log.txt"; then
+  pass "live website shows inside the app"
+else
+  fail "live website did not show inside the app"
+fi
+adb shell input keyevent KEYCODE_HOME
+adb shell am force-stop "$PKG"   # frees its memory for the rest of the test
+
+LIVE_SITE=0
+finish
 exit $FAILED

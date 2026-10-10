@@ -8,7 +8,10 @@
   the full look. The Android emulator test froze two seconds after the app opened the live site;
   this keeps the site from overloading a software-drawn screen.
 - The emulator test first opens a plain page in the app, to tell a stalled emulator from a page
-  that is too much for it.
+  that is too much for it. It runs every check that matters for the app first (alarm with the app
+  closed, arrival, self-update, sounds) and opens the live website last; the emulator draws in
+  software and freezes on the live site, so a freeze there is noted, with the emulator's last log
+  lines (logcat-last.txt), instead of discarding the whole run.
 
 ## 2.10.2 (2026-10-10)
 
