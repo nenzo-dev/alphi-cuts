@@ -7,7 +7,7 @@
 // is a new service worker: it downloads the new files in the background, replaces the old copies,
 // and js/lib/autoupdate.js then reloads open pages onto it. So every release must bump VERSION here
 // (and in js/config.js). Version checks and anything asked for fresh still go to the network.
-const VERSION = '2.14.1';
+const VERSION = '2.15.0';
 const CACHE = `alphicuts-${VERSION}`;
 // Photos and icons are kept across releases (they rarely change), so a new release doesn't download
 // them all again. Raise the number if a picture is ever replaced at the same address.
@@ -20,7 +20,7 @@ const CORE = [
   'js/lib/api.js', 'js/lib/ui.js', 'js/lib/slots.js', 'js/lib/content.js', 'js/lib/client.js',
   'js/lib/alarm.js', 'js/lib/ringtone.js', 'js/lib/notify.js', 'js/lib/ics.js', 'js/lib/image.js',
   'js/lib/appupdate.js', 'js/lib/arrival.js', 'js/lib/showcase.js', 'js/lib/autoupdate.js',
-  'js/lib/push.js', 'js/lib/notifyui.js', 'js/lib/soundui.js', 'js/lib/markdown.js', 'js/lib/proof.js', 'js/lib/motion.js',
+  'js/lib/push.js', 'js/lib/notifyui.js', 'js/lib/soundui.js', 'js/lib/markdown.js', 'js/lib/proof.js', 'js/lib/motion.js', 'js/lib/guide.js',
   'img/map.webp',
 ];
 

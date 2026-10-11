@@ -30,6 +30,7 @@
 <link rel="modulepreload" href="js/fx.js">
 <link rel="modulepreload" href="js/lib/showcase.js">
 <link rel="modulepreload" href="js/lib/motion.js">
+<link rel="modulepreload" href="js/lib/guide.js">
 <link rel="modulepreload" href="js/lib/autoupdate.js">
 <link rel="modulepreload" href="js/lib/push.js">
 <link rel="modulepreload" href="js/lib/notifyui.js">
@@ -123,7 +124,9 @@
       <p class="muted" data-c="book_intro">Open 9am to 8pm. Each slot is 30 minutes.</p>
     </div>
     <div class="grid-2">
-      <form class="card" id="booking-form" novalidate>
+      <form class="card booking-card" id="booking-form" novalidate>
+        <ol class="steps-rail" id="bk-steps" aria-label="Booking steps" hidden></ol>
+        <div class="guide-hint" id="bk-guide" aria-live="polite" hidden></div>
         <div id="bk-held" class="held-note" hidden>
           <p></p>
           <a class="btn btn-ghost btn-sm" href="#my-booking-card">See my booking</a>
@@ -132,17 +135,23 @@
         <div id="bk-pay" class="pay-first" hidden>
           <h3 data-c="pay_first_title">Pay first to book</h3>
           <p class="small muted" id="bk-pay-intro" data-c="pay_first_intro">Send the price to the details below, then upload a screenshot of your payment.</p>
-          <p class="pay-amount"><span class="muted small">Amount</span> <b id="bk-pay-amount"></b></p>
-          <pre id="bk-pay-details"></pre>
+          <p class="pay-amount"><span class="muted small">Amount to send</span> <b id="bk-pay-amount"></b></p>
+          <div id="bk-pay-details" class="pay-details"></div>
           <div class="pay-warning" id="bk-pay-warning">
             <p data-c="pay_warning">An accepted screenshot lets you book a slot. It does not guarantee your service. Call the owner after paying to confirm he has received your payment.</p>
             <a class="btn btn-ghost btn-sm" id="bk-warn-call" href="#" hidden>Call</a>
           </div>
-          <label for="bk-proof" id="bk-proof-label" data-c="pay_proof_label">Screenshot of your payment</label>
-          <input id="bk-proof" name="proof" type="file" accept="image/png,image/jpeg,image/webp,image/*">
-          <p class="small muted" data-c="pay_fresh_note" style="margin:6px 0 0">Upload the payment screenshot soon after payment, at least in less than 30 minutes.</p>
+          <p class="field-title" id="bk-proof-label" data-c="pay_proof_label">Screenshot of your payment</p>
+          <div class="fld" id="bk-upload-wrap">
+            <label class="upload" id="bk-upload" for="bk-proof">
+              <span class="upload-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V5m0 0 4 4m-4-4-4 4"/><path d="M4.5 15v2.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></svg></span>
+              <span class="upload-text"><b id="bk-upload-title" data-c="pay_upload_title">Choose your screenshot</b><small id="bk-upload-sub" data-c="pay_upload_sub">Tap here and pick it from your photos</small></span>
+            </label>
+          </div>
+          <input id="bk-proof" class="file-hidden" name="proof" type="file" accept="image/png,image/jpeg,image/webp,image/*">
+          <p class="small muted" data-c="pay_fresh_note" style="margin:8px 0 0">Upload the payment screenshot soon after payment, at least in less than 30 minutes.</p>
           <div id="bk-proof-status" class="proof-status" aria-live="polite" hidden></div>
-          <div id="bk-sign" class="sign-box" hidden>
+          <div id="bk-sign" class="sign-box fld" hidden>
             <label for="bk-signname" data-c="pay_name_label">Sign with your name as it shows when money is received</label>
             <input id="bk-signname" name="signname" maxlength="60" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. RUTH LUNGU">
             <p class="small muted" data-c="pay_name_hint">The name Mr Alfred sees when your money arrives.</p>
@@ -153,21 +162,27 @@
         <p id="bk-locked" class="small muted pay-locked" data-c="pay_locked" hidden></p>
         <fieldset id="bk-slots" class="bk-slots">
           <div class="field-row">
-            <div>
+            <div class="fld">
               <label for="bk-date">Day</label>
               <select id="bk-date"></select>
             </div>
-            <div>
+            <div class="fld">
               <label for="bk-slot">Time</label>
               <select id="bk-slot"><option value="">Loading&hellip;</option></select>
             </div>
           </div>
         </fieldset>
-        <label for="bk-name">Your name</label>
-        <input id="bk-name" name="name" autocomplete="name" maxlength="60" placeholder="e.g. Mumba Chanda">
-        <label for="bk-phone">Phone number</label>
-        <input id="bk-phone" name="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="09xx xxx xxx">
-        <button class="btn btn-gold btn-block btn-lg" type="submit" id="bk-submit" data-c="book_button">Book this slot</button>
+        <div class="fld">
+          <label for="bk-name">Your name</label>
+          <input id="bk-name" name="name" autocomplete="name" maxlength="60" placeholder="e.g. Mumba Chanda">
+        </div>
+        <div class="fld">
+          <label for="bk-phone">Phone number</label>
+          <input id="bk-phone" name="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="09xx xxx xxx">
+        </div>
+        <div class="fld" id="bk-submit-wrap">
+          <button class="btn btn-gold btn-block btn-lg" type="submit" id="bk-submit" data-c="book_button">Book this slot</button>
+        </div>
         <p class="small muted form-note">By booking you agree to our <a href="terms">terms</a> and <a href="privacy">privacy policy</a>.</p>
         <div id="bk-msg"></div>
       </form>
@@ -305,7 +320,7 @@
       <a href="disclaimer">Disclaimer</a>
       <a href="admin">Owner login</a>
     </nav>
-    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.14.1</span></p>
+    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.15.0</span></p>
   </div>
 </footer>
 

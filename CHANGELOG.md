@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.15.0 (2026-10-11)
+
+No database change.
+
+- **Nicer fields.** The boxes you type in are taller and rounder, lit from inside, with a gold glow when you are in
+  them. Name, phone and sign-your-name boxes carry a small icon, the Day and Time lists have a proper arrow, and
+  every "Choose File" on the site is a gold button in a dashed box.
+- **The payment details are a card.** The amount is a big gold pill, and each line of the owner's payment details
+  is a row: what it is on the left, the answer on the right, and a number (the agent code or phone number) is large,
+  gold, and has a Copy button. The owner still writes the details as plain lines in the owner panel
+  ("Airtel agent code: 20194278"); lines that are not "name: value" show as plain notes.
+- **The screenshot box.** Instead of the browser's grey file button there is a large box with a gold arrow:
+  "Choose your screenshot". After choosing, the box turns green, shows a small picture of what was chosen and the
+  file name, and says "Tap to choose a different one".
+- **A guide through booking, for people who are slow or new to phones** (js/lib/guide.js, after the money changing
+  app's finger and hints). A row of steps (Pay, Upload, Sign, Book; or Time, Details, Book when no payment is needed)
+  fills as each one is done, one line says what to do next, with arrows running towards it, the box to use glows,
+  and after 3.5 quiet seconds a finger taps it. It follows the person: Copy the number, choose the screenshot (the
+  line says to wait while it is read), sign, pick a time, type a name and a phone number, tap Book. It scrolls the
+  next box into view when a step is done and it is off the screen. After someone has done a step twice the finger no
+  longer shows for it (the words and the glow stay). A turned-down screenshot shows no hint, only the box that says
+  what to do. If a browser will not copy, tapping Copy still moves on, and says to press and hold the number.
+- The words for the steps and the hints, and for the screenshot box, can be changed in the owner panel (Public page
+  tab, "Booking steps and hints").
+
 ## 2.14.1 (2026-10-11)
 
 No database change.

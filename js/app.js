@@ -25,6 +25,7 @@ import {
 } from './lib/arrival.js';
 import { HAIRCUT_STYLES, styleThumb, stylePhotos } from './styles-data.js';
 import { enter, enterAll, whenSeen, countUp, flash, setHTML } from './lib/motion.js';
+import { createGuide } from './lib/guide.js';
 
 installGlobalErrorHandlers();
 armAudioUnlock();
@@ -446,19 +447,144 @@ const signedName = () => $('#bk-signname').value.trim().replace(/\s+/g, ' ');
 const nameOk = () => validSignedName(signedName());
 const payVerified = () => proofOk() && nameOk();   // an accepted screenshot, signed with a name
 
+// ---- the payment details as a card, the screenshot box, and the guide through the form (2.15.0)
+let copied = false;     // the person has copied the number to pay
+let guide = null;
+let guideRaf = 0;
+let uploadUrl = '';
+
+/** "Airtel agent code: 20194278" becomes a row with the number big and a Copy button; other lines stay as notes. */
+function renderPayDetails(text) {
+  const rows = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((line) => {
+    let label = '';
+    let value = '';
+    const colon = /^([^:]{1,40}):\s*(.+)$/.exec(line);
+    const loose = /(\+?\d[\d ]{5,}\d)/.exec(line);
+    if (colon) {
+      label = colon[1].trim();
+      value = colon[2].trim();
+    } else if (loose) {
+      value = loose[1].trim();
+      label = line.replace(loose[1], '').replace(/[\s,:;-]+$/, '').trim() || 'Number';
+    } else {
+      return `<div class="pd-note">${esc(line)}</div>`;
+    }
+    const number = /^\+?\d[\d ]{4,}\d$/.test(value);
+    return `<div class="pd-row"><span class="pd-label">${esc(label)}</span><span class="pd-value${number ? ' num' : ''}">${esc(value)}</span>${number ? `<button type="button" class="pd-copy" data-copy="${esc(value.replace(/\s/g, ''))}">Copy</button>` : ''}</div>`;
+  });
+  setHTML($('#bk-pay-details'), rows.join(''));
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* an old browser, or not allowed here */ }
+  try {
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(box);
+    box.select();
+    const ok = document.execCommand('copy');
+    box.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+async function onPayDetailsClick(e) {
+  const btn = e.target.closest('.pd-copy');
+  if (!btn) return;
+  const ok = await copyText(btn.dataset.copy || '');
+  copied = true;   // they tapped it: on to the next step, even if this browser would not copy
+  queueGuide();
+  if (!ok) { toast('Press and hold the number to copy it.'); return; }
+  btn.textContent = 'Copied';
+  btn.classList.add('done');
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1800);
+}
+
+/** The screenshot box shows the picture that was chosen, so slow or unsure people can see it worked. */
+function updateUpload() {
+  const box = $('#bk-upload');
+  const input = $('#bk-proof');
+  const file = input.files && input.files[0];
+  if (uploadUrl) { URL.revokeObjectURL(uploadUrl); uploadUrl = ''; }
+  let thumb = box.querySelector('.upload-thumb');
+  box.classList.toggle('has-file', !!file);
+  if (file) {
+    uploadUrl = URL.createObjectURL(file);
+    if (!thumb) {
+      thumb = document.createElement('img');
+      thumb.className = 'upload-thumb';
+      thumb.alt = '';
+      box.prepend(thumb);
+    }
+    thumb.src = uploadUrl;
+  } else if (thumb) {
+    thumb.remove();
+  }
+  const name = file ? String(file.name || '').replace(/\.[A-Za-z0-9]{2,5}$/, '') : '';
+  $('#bk-upload-title').textContent = file ? (name.length > 26 ? `${name.slice(0, 24)}...` : name || t('pay_upload_title')) : t('pay_upload_title');
+  $('#bk-upload-sub').textContent = file ? t('pay_upload_change') : t('pay_upload_sub');
+}
+
+/** Works out which step the person is on and tells the guide (lib/guide.js). */
+function guideNow() {
+  if (!guide || !cfg) return;
+  if (cfg.hidden.has('book') || heldBooking()) { guide.update(null); return; }
+  const pay = payRequired();
+  const digits = $('#bk-phone').value.replace(/\D/g, '');
+  let stage;
+  let target = null;
+  if (pay && !proofOk()) {
+    const copyBtn = $('#bk-pay-details .pd-copy');
+    if (proof && proof.status === 'busy') stage = 'reading';
+    else if (proof) stage = 'retry';   // turned down: the box under it says what to do
+    else if (copyBtn && !copied) { stage = 'pay'; target = copyBtn.closest('.pd-row'); }
+    else { stage = 'upload'; target = $('#bk-upload-wrap'); }
+  } else if (pay && !nameOk()) {
+    stage = 'sign';
+    target = $('#bk-sign');
+  } else if (!$('#bk-slot').value) {
+    stage = 'time';
+    target = $('#bk-slot').closest('.fld');
+  } else if (!$('#bk-name').value.trim()) {
+    stage = 'name';
+    target = $('#bk-name').closest('.fld');
+  } else if (digits.length < 9 || digits.length > 15) {
+    stage = 'phone';
+    target = $('#bk-phone').closest('.fld');
+  } else {
+    stage = 'book';
+    target = $('#bk-submit-wrap');
+  }
+  const steps = pay ? ['step_pay', 'step_upload', 'step_sign', 'step_book'] : ['step_time', 'step_details', 'step_book'];
+  const at = pay
+    ? { pay: 0, upload: 1, reading: 1, retry: 1, sign: 2 }[stage] ?? 3
+    : { time: 0, name: 1, phone: 1 }[stage] ?? 2;
+  guide.update({ stage, steps: steps.map((k) => t(k)), at, text: stage === 'retry' ? '' : t(`guide_${stage}`), target });
+}
+
+function queueGuide() {
+  cancelAnimationFrame(guideRaf);
+  guideRaf = requestAnimationFrame(guideNow);
+}
+
 function renderPayFirst() {
   if (!cfg) return;
   const on = payRequired();
   $('#bk-pay').hidden = !on;
   if (on) {
     $('#bk-pay-amount').textContent = `K${Number(payInfo.amount_kwacha).toFixed(0)}`;
-    $('#bk-pay-details').textContent = payInfo.instructions;
+    renderPayDetails(payInfo.instructions);
     const call = $('#bk-warn-call');
     call.hidden = !callTel();
     if (callTel()) { call.href = `tel:${callTel()}`; call.textContent = `Call ${ownerFirst()}`; }
   }
   renderProof();
   updatePayLock();
+  updateUpload();
 }
 
 function updatePayLock() {
@@ -467,6 +593,7 @@ function updatePayLock() {
   $('#bk-locked').hidden = !locked;
   $('#bk-sign').hidden = !(payRequired() && proofOk());
   onSignNote();
+  queueGuide();
 }
 
 // Only says when the name isn't typed in full. Nothing about what was read from the screenshot.
@@ -524,6 +651,7 @@ async function onProofPicked() {
   const file = $('#bk-proof').files && $('#bk-proof').files[0];
   const run = ++proofRun;
   proof = null;
+  updateUpload();
   if (!file || !cfg || !payInfo) { renderProof(); updatePayLock(); return; }
   proof = { status: 'busy', pct: 0.02, label: 'Checking the file' };
   renderProof();
@@ -636,6 +764,7 @@ async function refreshSlotOptions() {
     : '<option value="">No free times that day</option>';
   if (free.includes(prev)) sel.value = prev;
   sel.disabled = false;
+  queueGuide();
 }
 
 // One booking at a time (the database checks this too, by phone number and by device): while this
@@ -652,6 +781,7 @@ function updateBookingLimit() {
   if (held) note.querySelector('p').textContent = t('book_one_only', { time: fmtTime(held.slot_time), date: fmtDate(held.booking_date) });
   $('#booking-form').classList.toggle('is-held', !!held);
   $('#bk-submit').disabled = !!held;
+  queueGuide();
 }
 
 async function submitBooking(e) {
@@ -711,6 +841,8 @@ async function submitBooking(e) {
       $('#bk-phone').value = '';
       $('#bk-proof').value = '';
       $('#bk-signname').value = '';
+      updateUpload();
+      copied = false;
       proofRun++;
       proof = null;
       renderProof();
@@ -1354,6 +1486,10 @@ function wire() {
   $('#bk-date').addEventListener('change', refreshSlotOptions);
   $('#bk-proof').addEventListener('change', onProofPicked);
   $('#bk-signname').addEventListener('input', updatePayLock);
+  guide = createGuide({ rail: $('#bk-steps'), hint: $('#bk-guide'), form: $('#booking-form') });
+  $('#booking-form').addEventListener('input', queueGuide);
+  $('#booking-form').addEventListener('change', queueGuide);
+  $('#bk-pay-details').addEventListener('click', onPayDetailsClick);
   $('#booking-form').addEventListener('submit', submitBooking);
   $('#my-booking-body').addEventListener('click', onTicketAction);
   $('#review-form').addEventListener('submit', submitReview);

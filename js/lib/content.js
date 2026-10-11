@@ -110,6 +110,28 @@ export const TEXT_GROUPS = [
     },
   },
   {
+    title: 'Booking steps and hints',
+    keys: {
+      step_pay: ['Step 1 name', 'Pay'],
+      step_upload: ['Step 2 name', 'Upload'],
+      step_sign: ['Step 3 name', 'Sign'],
+      step_time: ['First step name when no payment is needed', 'Time'],
+      step_details: ['Second step name when no payment is needed', 'Details'],
+      step_book: ['Last step name', 'Book'],
+      guide_pay: ['Hint: pay', 'Send {price} to the number below. Tap it to copy.'],
+      guide_upload: ['Hint: upload the screenshot', 'Paid? Tap the box below and choose your payment screenshot.'],
+      guide_reading: ['Hint: while the screenshot is read', 'Reading your screenshot. Please wait.'],
+      guide_sign: ['Hint: sign', 'Now type your name as it shows when money is received.'],
+      guide_time: ['Hint: pick a time', 'Pick a day and a time.'],
+      guide_name: ['Hint: your name', 'Type your name.'],
+      guide_phone: ['Hint: your phone number', 'Type your phone number.'],
+      guide_book: ['Hint: book', 'All set. Tap the gold button to book.'],
+      pay_upload_title: ['Screenshot box title', 'Choose your screenshot'],
+      pay_upload_sub: ['Screenshot box line', 'Tap here and pick it from your photos'],
+      pay_upload_change: ['Screenshot box line after choosing', 'Tap to choose a different one'],
+    },
+  },
+  {
     title: 'Alerts',
     keys: {
       alert_reminder: ['Heads-up before the slot', 'Your cut at {shop} starts in {mins} minutes.'],
