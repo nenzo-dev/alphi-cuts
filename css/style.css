@@ -1122,8 +1122,11 @@ html.fx-lite .site-header { background: rgba(16, 26, 46, .97); }
 .brand-logo { box-shadow: 0 0 16px rgba(240, 178, 50, .5); animation: float-s 6s ease-in-out infinite; }
 
 /* The top of the home page: everything rises in, one after another */
-.hero::before { background: radial-gradient(ellipse 56% 62% at 50% 48%, rgba(8, 12, 22, .5), rgba(8, 12, 22, .2) 58%, transparent 80%); }
-.hero .tagline { color: #dde5f3; text-shadow: 0 2px 14px rgba(0, 0, 0, .65); }
+.hero::before { background: radial-gradient(ellipse 62% 58% at 50% 46%, rgba(8, 12, 22, .6), rgba(8, 12, 22, .28) 58%, transparent 82%); }
+.hero .tagline { color: #fff; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, .95), 0 2px 16px rgba(0, 0, 0, .85); }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero h1 { filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .8)) drop-shadow(0 0 18px rgba(240, 178, 50, .4)); }
+}
 .hero .rating-badge { animation: pop-in .7s var(--ease) .05s backwards; }
 .hero h1 { animation: rise .8s var(--ease) .18s backwards, title-shine 7s linear infinite; }
 .hero .tagline { animation: rise .7s var(--ease) .32s backwards; }

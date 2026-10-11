@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.14.1 (2026-10-11)
+
+No database change.
+
+- The shop name and the line under it at the top of the home page are easier to read over the brighter photos: a darker edge behind the letters and a slightly stronger pool of shade behind the text, with the photos themselves left bright.
+
 ## 2.14.0 (2026-10-11)
 
 No database change.
