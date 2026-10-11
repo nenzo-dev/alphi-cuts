@@ -24,6 +24,7 @@ import {
   arrivalAvailable, arrivalOn, arrivalDenied, turnArrivalOn, turnArrivalOff, updateArrivalWatch,
 } from './lib/arrival.js';
 import { HAIRCUT_STYLES, styleThumb, stylePhotos } from './styles-data.js';
+import { enter, enterAll, whenSeen, countUp, flash, setHTML } from './lib/motion.js';
 
 installGlobalErrorHandlers();
 armAudioUnlock();
@@ -178,13 +179,34 @@ let todayQueue = null; // { at, rows } from the last successful load of today's 
 
 function renderFreeBanner(freeNow) {
   const slot = $('#free-banner-slot');
-  if (!freeNow || cfg.hidden.has('queue')) { slot.innerHTML = ''; return; }
-  slot.innerHTML = `<div class="free-banner"><span class="live-dot" aria-hidden="true"></span><span class="fb-text">${esc(t('queue_free_banner'))}</span>${cfg.hidden.has('book') ? '' : '<a href="#book" class="btn btn-sm btn-gold">Book</a>'}</div>`;
+  if (!freeNow || cfg.hidden.has('queue')) { setHTML(slot, ''); return; }
+  const html = `<div class="free-banner"><span class="live-dot" aria-hidden="true"></span><span class="fb-text">${esc(t('queue_free_banner'))}</span>${cfg.hidden.has('book') ? '' : '<a href="#book" class="btn btn-sm btn-gold">Book</a>'}</div>`;
+  if (setHTML(slot, html)) whenSeen(slot, () => enter(slot.firstElementChild));
 }
 
 function updateNotifyButton(freeNow) {
   const push = notifyState();
   $('#notify-free-btn').hidden = freeNow || !(push === 'on' || push === 'off' || notifyPermission() === 'default');
+}
+
+/** Draws the day's slots. Only the slots that changed are touched, so nothing replays when the queue is refreshed. */
+function syncSlots(grid, items) {
+  const kind = (cls) => (cls.includes(' free') ? 'free' : cls.includes(' now') ? 'now' : 'taken');
+  const same = grid.children.length === items.length && items.every((it, i) => grid.children[i].dataset.t === it.time);
+  if (!same) {
+    grid.innerHTML = items.map((it) => `<div class="${it.cls}" data-t="${esc(it.time)}" title="${esc(it.title)}">${esc(it.text)}</div>`).join('');
+    enterAll(grid, '.slot', { cap: 18 });
+    return;
+  }
+  items.forEach((it, i) => {
+    const el = grid.children[i];
+    if (el.className === it.cls && el.title === it.title) return;
+    const was = kind(el.className);
+    el.className = it.cls;
+    el.title = it.title;
+    const now = kind(it.cls);
+    if (was !== now) flash(el, now === 'free' ? 1 : -1);   // a slot opening is good news, one being taken is not
+  });
 }
 
 async function loadQueue() {
@@ -199,7 +221,7 @@ async function loadQueue() {
 
   if (cfg.closed_weekdays.includes(weekdayOf(today))) {
     todayQueue = null;
-    summary.innerHTML = `<span class="muted">${esc(t('queue_closed'))}</span>`;
+    setHTML(summary, `<span class="muted">${esc(t('queue_closed'))}</span>`);
     grid.innerHTML = '';
     renderFreeBanner(false);
     updateNotifyButton(true);
@@ -221,7 +243,7 @@ async function loadQueue() {
   const nowMin = nowMinutesInShopTz();
   let nextFree = null;
 
-  grid.innerHTML = slots.map((s) => {
+  const items = slots.map((s) => {
     const m = toMin(s);
     const st = statuses.get(s);
     let cls = 'slot';
@@ -237,13 +259,25 @@ async function loadQueue() {
       label = 'booked';
     }
     if (m + len <= nowMin) cls += ' past';
-    return `<div class="${cls}" title="${fmtTime(s)}: ${label}">${fmtTime(s)}</div>`;
-  }).join('');
+    return { time: s, cls, title: `${fmtTime(s)}: ${label}`, text: fmtTime(s) };
+  });
+  syncSlots(grid, items);
 
   const ahead = rows.filter((r) => WAITING.includes(r.status) && toMin(r.slot_time) + len > nowMin).length;
-  summary.innerHTML = nextFree
-    ? `<span class="big">${ahead}</span><span class="muted">ahead in the queue &middot; next free slot <b class="gold">${fmtTime(nextFree)}</b></span>`
+  const bigBefore = summary.querySelector('.big');
+  const before = bigBefore ? Number(bigBefore.dataset.count) : NaN;
+  const summaryHtml = nextFree
+    ? `<span class="big" data-count="${ahead}">${ahead}</span><span class="muted">ahead in the queue &middot; next free slot <b class="gold">${fmtTime(nextFree)}</b></span>`
     : `<span class="muted">${esc(t('queue_full'))}</span>`;
+  if (setHTML(summary, summaryHtml)) {
+    const big = summary.querySelector('.big');
+    if (big && Number.isFinite(before) && before !== ahead) {
+      countUp(big, { from: before, ms: 650 });
+      flash(big, ahead < before ? 1 : -1);   // a shorter queue is good news
+    } else if (big) {
+      whenSeen(big, () => countUp(big, { from: 0 }));
+    }
+  }
 
   const open = nowMin >= toMin(cfg.open_time) && nowMin < toMin(cfg.close_time);
   const current = slots.find((s) => toMin(s) <= nowMin && nowMin < toMin(s) + len);
@@ -940,6 +974,7 @@ function renderMyBookings() {
   }
   const hasActive = myRows.some((r) => WAITING.includes(r.status));
   body.innerHTML = myRows.map(ticketHtml).join('') + (hasActive ? alertSetupHtml() : '');
+  if (!body.dataset.in) { body.dataset.in = '1'; enterAll(body, '.ticket'); }
   loadPaymentDetails();
 }
 
@@ -1169,6 +1204,7 @@ async function loadReviews() {
       ${r.reply ? `<div class="reply"><b>${esc(ownerFirst())}:</b> ${esc(r.reply)}</div>` : ''}
     </div>`;
   }).join('');
+  if (!list.dataset.in) { list.dataset.in = '1'; enterAll(list, '.review'); }
 }
 
 async function submitReview(e) {
@@ -1193,6 +1229,7 @@ async function submitReview(e) {
 // ---------------------------------------------------------------- chat
 let chatActive = false;
 let ownerMsgCount = -1;
+let chatShown = 0;
 const clock = new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', minute: '2-digit' });
 
 function chatInView() {
@@ -1217,6 +1254,8 @@ async function loadChat() {
     ? rows.map((m) => `<div class="msg ${m.sender === 'owner' ? 'owner' : 'client'}">${esc(m.body)}<time>${clock.format(new Date(m.created_at))}</time></div>`).join('')
     : `<p class="muted small">${esc(t('chat_empty'))}</p>`;
   if (nearBottom || rows.length < 4) box.scrollTop = box.scrollHeight;
+  if (chatShown > 0 && rows.length > chatShown) enter(box.lastElementChild);   // a new message slides in
+  chatShown = rows.length;
   if (rows.some((m) => m.sender === 'owner' && !m.read_by_client)) {
     rpc('mark_messages_read_by_client', { p_token: token }).catch(() => {});
   }

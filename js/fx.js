@@ -5,17 +5,18 @@
 // run, the page works and looks the same apart from the movement.
 import { mountShowcase } from './lib/showcase.js';
 import { watchForUpdates } from './lib/autoupdate.js';
+import { initMotion, revealSection } from './lib/motion.js';
 
 const root = document.documentElement;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const mouse = matchMedia('(hover: hover) and (pointer: fine)').matches;
-// Phones with very little memory or very few cores get a lighter version: fewer photos, no blur.
-const lite = (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
 // No real graphics chip (js/soft-graphics.js decided before the page was drawn): no ring, nothing moving.
 const soft = root.classList.contains('fx-soft');
 
 root.classList.add('fx');
-if (lite) root.classList.add('fx-lite');
+// Phones with very little memory or very few cores (or that turn out to be slow) get a lighter version: fewer
+// photos, no blur, nothing that moves on its own (lib/motion.js).
+const lite = initMotion();
 
 if (!soft) mountShowcase({ count: lite ? 8 : 12, quiet: !document.querySelector('.hero'), still: reduceMotion });
 watchForUpdates();
@@ -24,6 +25,7 @@ if (!reduceMotion && !soft) {
   if (mouse) followTheMouse();
   glowWhereTapped();
   lightUpSections();
+  markNavOnScroll();
 }
 lightUpUnderPointer();
 
@@ -115,6 +117,7 @@ function lightUpSections() {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
         entry.target.classList.add('lit');
+        revealSection(entry.target);
         seen.unobserve(entry.target);
       }
     });
@@ -123,6 +126,27 @@ function lightUpSections() {
   // Anything already on screen (or jumped to with a link) lights straight away.
   requestAnimationFrame(() => items.forEach((el) => {
     const r = el.getBoundingClientRect();
-    if (r.top < innerHeight && r.bottom > 0) el.classList.add('lit');
+    if (r.top < innerHeight && r.bottom > 0) { el.classList.add('lit'); revealSection(el); }
   }));
+}
+
+/** The link of the section you are reading lights up in the top bar. */
+function markNavOnScroll() {
+  const links = [...document.querySelectorAll('.nav-links a[data-section]')];
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(links.map((a) => [a.dataset.section, a]));
+  let current = null;
+  const spy = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const link = byId.get(entry.target.id);
+      if (!link || link === current) continue;
+      if (current) current.classList.remove('on');
+      current = link;
+      link.classList.remove('on');
+      void link.offsetWidth;
+      link.classList.add('on');
+    }
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  byId.forEach((_, id) => { const el = document.getElementById(id); if (el) spy.observe(el); });
 }

@@ -13,6 +13,7 @@ import { prepareImage } from './lib/image.js';
 import { armAudioUnlock, chime, loadCustomSound } from './lib/ringtone.js';
 import { openSounds } from './lib/soundui.js';
 import { ownerPushState, ownerTurnOn, ownerTurnOff, sendTestPush } from './lib/push.js';
+import { enter, countUp, flash, setHTML } from './lib/motion.js';
 
 installGlobalErrorHandlers();
 armAudioUnlock();
@@ -246,7 +247,20 @@ function showTab(name) {
   });
   $$('.admin-main > section[data-panel]').forEach((s) => { s.hidden = s.dataset.panel !== name; });
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
+  enterPanel($(`.admin-main > section[data-panel="${name}"]`));
   Promise.resolve().then(TABS[name]).catch((err) => report(err));
+}
+
+/** The blocks of a tab rise one after another when it opens (once: refreshing the tab later does not replay it). */
+function enterPanel(panel) {
+  if (!panel) return;
+  let n = 0;
+  for (const el of panel.children) {
+    if (el.hidden) continue;
+    if (el.matches('.stat-row')) { [...el.children].forEach((c) => { enter(c, Math.min(n, 8)); n += 1; }); continue; }
+    enter(el, Math.min(n, 8));
+    n += 1;
+  }
 }
 
 async function showAdmin() {
@@ -473,11 +487,21 @@ async function loadQueueTab() {
   const rows = await rpc('admin_bookings_for_date', { p_date: todayISO() });
   noticeNewBookings(rows);
   const count = (fn) => rows.filter(fn).length;
-  $('#queue-stats').innerHTML = `
-    <div class="stat"><div class="n">${count((r) => WAITING.includes(r.status))}</div><div class="l">Waiting</div></div>
-    <div class="stat"><div class="n">${count((r) => r.status === 'in_chair')}</div><div class="l">In the chair</div></div>
-    <div class="stat"><div class="n">${count((r) => r.status === 'done')}</div><div class="l">Done today</div></div>
-    <div class="stat"><div class="n">${count((r) => r.status === 'no_show')}</div><div class="l">No-shows</div></div>`;
+  const stats = $('#queue-stats');
+  const before = [...stats.querySelectorAll('.n')].map((n) => Number(n.dataset.count));
+  const figures = [
+    [count((r) => WAITING.includes(r.status)), 'Waiting'],
+    [count((r) => r.status === 'in_chair'), 'In the chair'],
+    [count((r) => r.status === 'done'), 'Done today'],
+    [count((r) => r.status === 'no_show'), 'No-shows'],
+  ];
+  if (setHTML(stats, figures.map(([n, label]) => `<div class="stat"><div class="n" data-count="${n}">${n}</div><div class="l">${label}</div></div>`).join(''))) {
+    stats.querySelectorAll('.n').forEach((el, i) => {
+      const now = figures[i][0];
+      if (Number.isFinite(before[i]) && before[i] !== now) { countUp(el, { from: before[i], ms: 600 }); flash(el.parentElement, now > before[i] ? 1 : -1); }
+      else countUp(el, { from: 0, delay: i * 90 });
+    });
+  }
   // Clients with a booking come before walk-ins; each in slot order.
   const visible = rows.filter((r) => r.status !== 'cancelled')
     .sort((a, b) => (Number(!!a.is_walkin) - Number(!!b.is_walkin)) || String(a.slot_time).localeCompare(String(b.slot_time)));

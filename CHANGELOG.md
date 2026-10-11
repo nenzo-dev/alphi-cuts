@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.14.0 (2026-10-11)
+
+No database change.
+
+- **A brighter look, in the colours of the money changing app.** A deep navy page lit by gold, blue and violet
+  light, bright glass panels with a warm light in the corner and a clear edge, gold buttons with a glow, white
+  headings and lighter small text. The input boxes and the payment details box are light glass instead of
+  near-black. Nothing is dimmed any more: free times that have passed are struck through instead of faded, locked
+  fields are only slightly softened, the ring of haircut photos is brighter and softens only a little as you
+  scroll (it used to fade to a quarter), and the backdrop behind pop-ups is lighter.
+- **Motion, in the style of the money changing app** (js/lib/motion.js). The top of the home page rises in one
+  piece after another. Headings, cards and style photos rise into place when you scroll to them, once. The day's
+  times pop in one after another, and when the queue is refreshed only the times that changed are touched: one
+  opening glows green, one being taken glows red. "Ahead in the queue" counts up and glows when it changes. In the
+  owner panel each tab rises in when it opens and the day's numbers count up and glow. A new chat message slides
+  in, pop-ups pop in, the link of the section you are reading lights up in the top bar, the gold buttons and the
+  price pill shine now and then, and the logo floats a little.
+- **Light mode.** A phone with little memory or few cores starts without blur and without anything that moves on
+  its own, and any phone that cannot hold about 30 frames a second switches to it and remembers (`ac_lite`).
+  People who ask their phone for less motion get none. Entrances never replay when a block is redrawn.
+- The browser bar and the installed app's splash screen are navy too. The Android app's own loading background,
+  alarm screen and offline page still use the old dark brown until the next app release.
+
 ## 2.13.0 (2026-10-11)
 
 Run `supabase/migrations/20_strict_screenshot_checks.sql` once in the Supabase SQL editor, after 19.

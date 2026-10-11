@@ -1,7 +1,7 @@
 // The ring of haircut photos that turns slowly in 3D behind every page. It shows the cuts the owner
 // uploaded in the owner panel first, then the built-in styles, and leans a little towards the mouse.
-// On the home page it is bright behind the top of the page and dims as you scroll down; on the other
-// pages it stays dim so the text is easy to read.
+// On the home page it is brightest behind the top of the page and softens a little as you scroll down; on the
+// other pages it stays a quieter backdrop so the text is easy to read.
 import { rpcShared, publicFileUrl } from './api.js';
 import { storageGet, storageSet } from './ui.js';
 import { HAIRCUT_STYLES, styleThumb } from '../styles-data.js';
@@ -15,7 +15,7 @@ export function mountShowcase({ count = 12, quiet = false, still = false } = {})
   stage.id = 'cuts-3d';
   stage.className = `cuts-3d${quiet ? ' cuts-quiet' : ''}`;
   stage.setAttribute('aria-hidden', 'true');
-  stage.innerHTML = '<div class="orb orb-a"></div><div class="orb orb-b"></div><div class="cuts-tilt"><div class="cuts-ring"></div></div>';
+  stage.innerHTML = '<div class="orb orb-a"></div><div class="orb orb-b"></div><div class="orb orb-c"></div><div class="cuts-tilt"><div class="cuts-ring"></div></div>';
   document.body.prepend(stage);
 
   const ring = stage.querySelector('.cuts-ring');
@@ -97,7 +97,7 @@ function dimOnScroll(stage) {
   const apply = () => {
     raf = 0;
     const gone = Math.min(scrollY / (innerHeight * 1.1), 1);
-    stage.style.setProperty('--cuts-o', (1 - gone * 0.75).toFixed(3));
+    stage.style.setProperty('--cuts-o', (1 - gone * 0.4).toFixed(3));
     // Past the top of the page the ring is only a dim backdrop, so it rests there (css: fx-past-hero).
     document.documentElement.classList.toggle('fx-past-hero', gone > 0.85);
   };
