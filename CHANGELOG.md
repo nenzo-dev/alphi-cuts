@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.12.2 (2026-10-11)
+
+Run `supabase/migrations/19_rejected_proofs_log.sql` once in the Supabase SQL editor, after 18.
+
+- A turned-down screenshot now only says **"Fake proof of payment"** and tells the client to call the
+  owner. The reasons are no longer shown to the client, because they would show how to get a fake past
+  the checks. A screenshot that is accepted shows only who was paid, the amount and the transaction ID:
+  the file details and the list of what was checked are gone from the client's view. The booking
+  errors from the database are one plain message too, and the terms no longer list the checks.
+- The reasons go to the owner instead. The page sends each turned-down screenshot, with its picture and
+  the reasons, to a private log (`rejected_proofs`), and the owner panel (Payments > Turned-down
+  screenshots) lists them with a View button: the picture, what was read, the file's details and why it
+  was turned down. When a client calls and really paid, Mr Alfred can see why and book them in. The log
+  and its pictures are deleted after 14 days; a browser can add at most 20 an hour.
+- The note under the screenshot field (and the terms) no longer give the real time limit: they say to
+  upload the screenshot soon after paying, at least within 30 minutes. The real limit stays an hour, so
+  there is room for slow phones, and nobody learns the exact cut-off.
+
 ## 2.12.1 (2026-10-11)
 
 Run `supabase/migrations/18_sign_name_drop_sms.sql` once in the Supabase SQL editor, after 17.

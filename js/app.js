@@ -471,38 +471,17 @@ function callHtml() {
     : `<p>${text}</p>`;
 }
 
+// Only what the client needs to see that we read the right payment. Nothing about what is checked.
 function factsHtml(p) {
-  const { info, parsed } = p;
-  const m = info.meta || {};
+  const { parsed } = p;
   const row = (k, v) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`;
-  const to = parsed.recipient.name_ok ? cfg.owner_name : (parsed.recipient.account_ok ? `Account ${parsed.recipient.account}` : 'Not found');
-  const made = [m.software, m.xmp].filter(Boolean).join(', ') || 'No editing app found';
-  const cam = [m.make, m.model].filter(Boolean).join(' ') || (m.exposure ? 'Camera settings found' : 'None (a screenshot)');
+  const to = parsed.recipient.name_ok ? cfg.owner_name : (parsed.recipient.account_ok ? `Account ${parsed.recipient.account}` : '');
   return `
     <table class="proof-facts">
       ${row('Paid to', to)}
-      ${row('Amount', parsed.amount ? `K${Number(parsed.amount.value).toFixed(Number.isInteger(parsed.amount.value) ? 0 : 2)}` : 'Not found')}
-      ${row('Transaction ID', parsed.txn_id || 'Not found')}
-      ${row('Date and time', [parsed.date, parsed.time].filter(Boolean).join(' ') || 'Not found')}
-      ${row('Paid with', parsed.network || 'Not shown')}
-    </table>
-    <details>
-      <summary>The file and what we checked</summary>
-      <table class="proof-facts">
-        ${row('File name', info.name || 'Not shown')}
-        ${row('Type', info.kind ? info.kind.toUpperCase() : 'Not a picture')}
-        ${row('Size', fmtBytes(info.size))}
-        ${row('Pixels', info.width ? `${info.width} x ${info.height}` : 'Unknown')}
-        ${row('File saved', fmtWhen(info.modified))}
-        ${row('Made with', made)}
-        ${row('Camera', cam)}
-        ${m.taken ? row('Taken', m.taken) : ''}
-        ${row('Fingerprint', info.sha256.slice(0, 16))}
-      </table>
-      <ul class="proof-checks">
-        ${p.judged.checks.map((c) => `<li class="${c.ok ? '' : 'no'}">${esc(c.label)}${c.ok || !c.detail ? '' : ` <span class="muted">(${esc(c.detail)})</span>`}</li>`).join('')}
-      </ul>
-    </details>`;
+      ${row('Amount', parsed.amount ? `K${Number(parsed.amount.value).toFixed(Number.isInteger(parsed.amount.value) ? 0 : 2)}` : '')}
+      ${row('Transaction ID', parsed.txn_id || '')}
+    </table>`;
 }
 
 function renderProof() {
@@ -518,12 +497,10 @@ function renderProof() {
   } else if (proof.status === 'approved') {
     box.className = 'proof-status ok';
     box.innerHTML = `<h4>${esc(t('pay_proof_ok'))}</h4>${factsHtml(proof)}
-      ${proof.judged.warnings.length ? `<p class="small muted">Not clear in the picture: ${esc(proof.judged.warnings.join(' '))}</p>` : ''}
       <p><b>${esc(t('pay_proof_show'))}</b></p>${callBtnHtml()}`;
   } else {
     box.className = 'proof-status bad';
-    box.innerHTML = `<h4>${esc(t('pay_proof_bad'))}</h4>
-      <ul>${proof.judged.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>${factsHtml(proof)}${callHtml()}`;
+    box.innerHTML = `<h4>${esc(t('pay_proof_bad'))}</h4>${callHtml()}`;
   }
 }
 
@@ -557,10 +534,11 @@ async function onProofPicked() {
       if (run !== proofRun) return;
       if (used) {
         judged.verdict = 'rejected';
-        judged.reasons.push(t('pay_proof_used'));
-        judged.checks.push({ id: 'unused', label: 'Not used for another booking', ok: false, detail: t('pay_proof_used'), hard: true });
+        judged.reasons.push('This screenshot, or its transaction ID, has already been used for a booking.');
+        judged.checks.push({ id: 'unused', label: 'Not used for another booking', ok: false, detail: 'Already used for a booking.', hard: true });
       }
     }
+    if (judged.verdict === 'rejected') logRejected(file, info, ocr, parsed, judged);   // for the owner: the reasons are never shown to the client
     proof = { status: judged.verdict, file, info, ocr, parsed, judged, path: '' };
   } catch {
     if (run !== proofRun) return;
@@ -568,6 +546,20 @@ async function onProofPicked() {
   }
   renderProof();
   updatePayLock();
+}
+
+// Tells the owner a screenshot was turned down and why (with the picture), for when the client calls.
+async function logRejected(file, info, ocr, parsed, judged) {
+  try {
+    let path = '';
+    if (info.kind && info.size <= MAX_BYTES) {
+      try { path = await uploadProof({ file, info }); } catch { path = ''; }
+    }
+    const rec = buildProof({ file: info, ocr, parsed, judged, path });
+    rec.reasons = judged.reasons;
+    delete rec.ocr;
+    await rpc('log_rejected_proof', { p_proof: rec, p_device: deviceToken() });
+  } catch { /* the owner just won't see it */ }
 }
 
 // Puts the picture in the private bucket (the owner reads it from there) and answers its path.

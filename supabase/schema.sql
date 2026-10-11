@@ -1,4 +1,4 @@
--- AlPhi Cuts database schema (v2.12.0).
+-- AlPhi Cuts database schema (v2.12.2).
 --
 -- Row-level security is the real access control. Anything the public can do goes through a
 -- SECURITY DEFINER function below, which checks its inputs and only touches what it should: a
@@ -234,6 +234,21 @@ alter table public.bookings enable row level security;
 create policy bookings_owner_all on public.bookings for all
   using (public.is_owner()) with check (public.is_owner());
 
+-- Screenshots the page turned down, with the reasons: for the owner only (2.12.2).
+create table public.rejected_proofs (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  device_token text,                -- the browser that sent it, to tell attempts apart
+  reasons text[] not null default '{}',   -- why it was turned down: for the owner only, never shown to the client
+  proof jsonb not null,             -- what was read from it, and the file's details
+  path text,                        -- the picture, in the payment-proofs bucket (if it uploaded)
+  sha256 text
+);
+create index rejected_proofs_created on public.rejected_proofs (created_at desc);
+alter table public.rejected_proofs enable row level security;
+create policy rejected_proofs_owner_all on public.rejected_proofs for all
+  using (public.is_owner()) with check (public.is_owner());
+
 -- Minutes since midnight of the slot a booking occupies: its booked slot while waiting, or the
 -- slot its cut actually started in once the barber has started it.
 create or replace function public.effective_minute(p_status text, p_slot time, p_started timestamptz, p_open int, p_len int)
@@ -399,11 +414,11 @@ begin
     end if;
     -- The screenshot, and the payment on it, can't be more than an hour old (the page checks this too).
     if p_proof->'file'->>'modified' ~ '^\d{4}-\d{2}-\d{2}T' and now() - (p_proof->'file'->>'modified')::timestamptz > interval '65 minutes' then
-      raise exception 'That screenshot is more than an hour old. Please pay again and send a screenshot of the new payment.';
+      raise exception 'That payment screenshot was not accepted. If you really paid, please call the shop to confirm.';
     end if;
     if p_proof->'extracted'->>'date' ~ '^\d{4}-\d{2}-\d{2}$' and p_proof->'extracted'->>'pay_time' ~ '^\d{2}:\d{2}$'
        and public.shop_now() - ((p_proof->'extracted'->>'date')::date + (p_proof->'extracted'->>'pay_time')::time) > interval '70 minutes' then
-      raise exception 'That payment is more than an hour old. Please pay again and send a screenshot of the new payment.';
+      raise exception 'That payment screenshot was not accepted. If you really paid, please call the shop to confirm.';
     end if;
     v_path := p_proof->>'path';
     v_hash := lower(coalesce(p_proof->>'sha256', ''));
@@ -447,12 +462,12 @@ begin
   if v_pay and exists (
     select 1 from public.bookings where lower(payment_ref) = lower(v_ref) and payment_status <> 'rejected'
   ) then
-    raise exception 'That payment (transaction ID) has already been used for a booking. Each payment is for one booking.';
+    raise exception 'That payment screenshot was not accepted. If you really paid, please call the shop to confirm.';
   end if;
   if v_pay and exists (
     select 1 from public.bookings where payment_proof_hash = v_hash and payment_status <> 'rejected'
   ) then
-    raise exception 'That screenshot has already been used for a booking. Each payment is for one booking.';
+    raise exception 'That payment screenshot was not accepted. If you really paid, please call the shop to confirm.';
   end if;
 
   if public.slot_is_taken(p_date, p_slot, c.slot_minutes) then
@@ -1402,6 +1417,7 @@ language sql stable security definer set search_path = public as $$
     and o.bucket_id = 'payment-proofs'
     and o.created_at < now() - interval '1 day'
     and not exists (select 1 from public.bookings b where b.payment_proof_path = o.name)
+    and not exists (select 1 from public.rejected_proofs r where r.path = o.name)
   limit 200;
 $$;
 revoke all on function public.admin_stale_payment_proofs() from public, anon;
@@ -1418,6 +1434,40 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 grant execute on function public.proof_in_use(text, text) to anon, authenticated;
 
+-- What the page sends when it turns a screenshot down, so the owner can see why when the client calls.
+-- Quietly ignored when it looks wrong or too many come from one browser.
+create or replace function public.log_rejected_proof(p_proof jsonb, p_device text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_device text := case when public.valid_token(p_device) then p_device end;
+  v_path text := nullif(p_proof->>'path', '');
+  v_hash text := lower(coalesce(p_proof->>'sha256', ''));
+begin
+  if p_proof is null or jsonb_typeof(p_proof) <> 'object' or pg_column_size(p_proof) > 30000 then return; end if;
+  if v_hash !~ '^[0-9a-f]{64}$' then return; end if;
+  if v_path is not null and not public.valid_token(split_part(v_path, '/', 1)) then v_path := null; end if;
+  if v_device is not null and (select count(*) from public.rejected_proofs
+       where device_token = v_device and created_at > now() - interval '1 hour') >= 20 then return; end if;
+  insert into public.rejected_proofs (device_token, reasons, proof, path, sha256)
+  values (v_device,
+          coalesce(array(select left(x, 300) from jsonb_array_elements_text(
+            case when jsonb_typeof(p_proof->'reasons') = 'array' then p_proof->'reasons' else '[]'::jsonb end) x limit 12), '{}'),
+          p_proof - 'ocr', v_path, v_hash);
+end;
+$$;
+grant execute on function public.log_rejected_proof(jsonb, text) to anon, authenticated;
+
+create or replace function public.admin_list_rejected_proofs(p_limit int default 30)
+returns setof public.rejected_proofs
+language sql stable security definer set search_path = public as $$
+  select * from public.rejected_proofs
+  where public.is_owner()
+  order by created_at desc
+  limit least(greatest(coalesce(p_limit, 30), 1), 100);
+$$;
+revoke all on function public.admin_list_rejected_proofs(int) from public, anon;
+grant execute on function public.admin_list_rejected_proofs(int) to authenticated;
+
 
 -- ============================================================ AUTOMATIC CLEANUP
 create or replace function public.cleanup_old_records()
@@ -1432,6 +1482,7 @@ begin
     where status = 'no_show' and booking_date < public.shop_today() and payment_status not in ('approved', 'submitted', 'paid');
   delete from public.bookings where booking_date < public.shop_today() - v_keep;
   delete from public.chat_messages where created_at < now() - make_interval(days => v_keep);
+  delete from public.rejected_proofs where created_at < now() - interval '14 days';
   delete from public.style_requests
     where storage_path is null and created_at < now() - make_interval(days => v_keep);
   delete from public.push_outbox where created_at < now() - interval '2 days';

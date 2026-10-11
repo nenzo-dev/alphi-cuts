@@ -356,6 +356,7 @@ function wireShell() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#admin-chat-form').requestSubmit(); }
   });
   $('#pay-form').addEventListener('submit', savePaymentDetails);
+  $('#rejected-table').addEventListener('click', onRejectedClick);
   $('#payments-table').addEventListener('click', onPaymentAction);
   $('#feedback-list').addEventListener('click', onFeedbackAction);
   $('#requests-list').addEventListener('click', onRequestAction);
@@ -626,6 +627,7 @@ async function loadPaymentsTab() {
   if (!editing) $('#pc-instructions').value = details || '';
   $('#pc-required-row').hidden = !(flag && flag[0] && 'require_payment' in flag[0]);
   if (!$('#pc-required-row').hidden && !editing) $('#pc-required').checked = !!flag[0].require_payment;
+  loadRejectedList().catch(() => {});
   lastRows = rows || [];
   $('#payments-table').innerHTML = (rows || []).map((r) => `
     <tr>
@@ -641,6 +643,33 @@ async function loadPaymentsTab() {
         ${r.payment_status === 'submitted' ? `<button class="btn btn-sm btn-ghost" data-pay="reject" data-id="${esc(r.id)}">Not received</button>` : ''}
       </td>
     </tr>`).join('') || '<tr><td colspan="6" class="muted">Nothing needs your attention.</td></tr>';
+}
+
+let rejectedRows = [];
+async function loadRejectedList() {
+  let rows;
+  try { rows = (await rpc('admin_list_rejected_proofs', { p_limit: 30 })) || []; } catch { $('#rejected-card').hidden = true; return; } // older database
+  $('#rejected-card').hidden = false;
+  rejectedRows = rows;
+  const when = (iso) => new Date(iso).toLocaleString('en-GB', { timeZone: CONFIG.timeZone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  $('#rejected-table').innerHTML = rows.map((r) => {
+    const x = (r.proof && r.proof.extracted) || {};
+    const read = [x.amount != null ? `K${x.amount}` : '', x.txn_id || '', x.recipient_ok || x.account_ok ? 'paid to you' : ''].filter(Boolean).join(' &middot; ');
+    return `<tr>
+      <td data-label="Time" class="small">${esc(when(r.created_at))}</td>
+      <td data-label="What was read" class="small">${read || '<span class="muted">Nothing readable</span>'}</td>
+      <td data-label="Why" class="small">${esc((r.reasons || []).slice(0, 3).join(' | ')) || '<span class="muted">None recorded</span>'}</td>
+      <td class="actions"><button class="btn btn-sm btn-ghost" data-rej="${esc(r.id)}">View</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="muted">None yet.</td></tr>';
+}
+
+function onRejectedClick(e) {
+  const btn = e.target.closest('[data-rej]');
+  if (!btn) return;
+  const r = rejectedRows.find((x) => x.id === btn.dataset.rej);
+  if (!r) return;
+  showProof({ payment_proof: r.proof, payment_proof_path: r.path, payment_proof_hash: r.sha256, payment_submitted_at: r.created_at, _reasons: r.reasons || [] }).catch((err) => report(err));
 }
 
 async function savePaymentDetails(e) {
@@ -688,7 +717,8 @@ const CHECK_LABEL = {
 function closeProof() { $('#modal-root').innerHTML = ''; }
 
 async function showProof(row) {
-  if (!row || !row.payment_proof_path) { toast('There is no screenshot for this booking.'); return; }
+  const rejected = !!(row && Array.isArray(row._reasons));   // a turned-down screenshot, not a booking
+  if (!row || (!row.payment_proof_path && !rejected)) { toast('There is no screenshot for this booking.'); return; }
   const p = row.payment_proof || {};
   const f = p.file || {};
   const m = f.meta || {};
@@ -697,16 +727,17 @@ async function showProof(row) {
   const line = (k, v) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`;
   const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(Number(n) / 1024))} KB`);
   let url = '';
-  try { url = await signedFileUrl('payment-proofs', row.payment_proof_path, 600); } catch { url = ''; }
+  try { url = row.payment_proof_path ? await signedFileUrl('payment-proofs', row.payment_proof_path, 600) : ''; } catch { url = ''; }
   const checks = (p.checks || []).map((c) => `<li class="${c.ok ? '' : 'no'}">${esc(CHECK_LABEL[c.id] || c.id)}</li>`).join('');
   const canAct = row.payment_status === 'submitted' && ['booked', 'on_deck', 'called', 'checked_in', 'in_chair'].includes(row.status);
   $('#modal-root').innerHTML = `
     <div class="modal-backdrop" id="proof-backdrop">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Payment screenshot">
         <button type="button" class="modal-close" id="proof-close" aria-label="Close">&times;</button>
-        <h3>${esc(row.client_name)} &middot; ${esc(fmtTime(row.slot_time))}</h3>
+        <h3>${rejected ? `Turned down &middot; ${esc(when(row.payment_submitted_at))}` : `${esc(row.client_name)} &middot; ${esc(fmtTime(row.slot_time))}`}</h3>
+        ${rejected ? `<div class="sign-card" style="margin:10px 0"><b>Why it was turned down</b><ul style="margin:6px 0 4px;padding-left:18px">${row._reasons.map((x) => `<li>${esc(x)}</li>`).join('') || '<li>No reason was recorded.</li>'}</ul><div class="small">The client was only shown "Fake proof of payment" and told to call you.</div></div>` : ''}
         ${p.signed_name ? `<div class="sign-card" style="margin:10px 0"><b>Signed as: ${esc(p.signed_name)}</b><div class="small">On your phone, the message when this money arrived should say <b>received from ... ${esc(p.signed_name)}</b>, with the same transaction ID (${esc(x.txn_id || 'see below')}) and amount.${p.name_seen ? ' This name is also in the screenshot.' : ''}</div></div>` : ''}
-        <p class="small muted">Look at the screenshot and at your own payment messages. The details below were read by the client's phone and are only a check for obvious problems.</p>
+        ${rejected ? '' : `<p class="small muted">Look at the screenshot and at your own payment messages. The details below were read by the client's phone and are only a check for obvious problems.</p>`}
         ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="Payment screenshot" style="max-width:100%;max-height:55vh;border-radius:10px;display:block;margin:8px auto"></a>` : '<p class="muted">The screenshot could not be loaded.</p>'}
         <table class="proof-facts">
           ${line('Read as', p.verdict === 'approved' ? 'Accepted by the page' : String(p.verdict || 'Unknown'))}

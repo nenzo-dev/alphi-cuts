@@ -212,6 +212,16 @@
           </table>
         </div>
       </div>
+      <div class="card" id="rejected-card" hidden>
+        <h3>Turned-down screenshots</h3>
+        <p class="small muted">When a screenshot is turned down, the client is only told "Fake proof of payment" and to call you; the reasons stay here, so they can't be used to get a fake past. Newest first, kept for 14 days. If they call and really paid, open it to see why, then book them in from the Bookings tab.</p>
+        <div class="table-wrap">
+          <table class="stack">
+            <thead><tr><th>Time</th><th>What was read</th><th>Why it was turned down</th><th></th></tr></thead>
+            <tbody id="rejected-table"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section data-panel="feedback" hidden>

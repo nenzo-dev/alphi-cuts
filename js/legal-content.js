@@ -18,7 +18,7 @@ This page explains what {shop} collects through this website, why we collect it,
 - **Chat:** the messages you send us and our replies.
 - **Style requests:** the description you write and any photo you upload.
 - **Reviews:** the name you give (optional), your rating and your comment.
-- **Payments:** the screenshot of your payment that you upload when you pay before booking, the name you sign with, what is read from it (who was paid, the amount, the transaction ID, the date and details of the picture file such as its size and when it was saved), and whether the payment was confirmed. The screenshot is read on your own phone, then saved so {owner_first} can check it. A screenshot can show other things, such as your own number or balance, so crop it if you like, but keep the payment details clear. We never ask for card numbers or mobile money PINs. You pay us directly.
+- **Payments:** the screenshot of your payment that you upload when you pay before booking, the name you sign with, what is read from it (who was paid, the amount, the transaction ID, the date and details of the picture file such as its size and when it was saved), and whether the payment was confirmed. A screenshot that is turned down is kept, with the reason, for 14 days so {owner_first} can look at it if you call. The screenshot is read on your own phone, then saved so {owner_first} can check it. A screenshot can show other things, such as your own number or balance, so crop it if you like, but keep the payment details clear. We never ask for card numbers or mobile money PINs. You pay us directly.
 - **Arriving at the shop:** only if you turn on "Check me in when I arrive" (see below).
 - **Notifications:** only if you turn them on (see below).
 - **On your device:** the site keeps a few random codes in your browser so it can show your own booking and chat. They don't contain your name or number. Clearing your browser data removes them, but you'll no longer see your booking on that device.
@@ -109,10 +109,10 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 ## Prices and payment
 
 - Prices are in Zambian kwacha and may change.
-- To book a slot online you pay first. The payment details are on the booking form. After you pay, upload a screenshot of the payment. We check it for obvious problems (who was paid, the amount, the transaction ID, the date, and whether the picture has been edited), and the free times open if it passes. A screenshot that doesn't pass is turned down; if you really paid, call {owner_first} so he can confirm he has seen your payment.
+- To book a slot online you pay first. The payment details are on the booking form. After you pay, upload a screenshot of the payment. We check it, and the free times open if it passes. A screenshot that doesn't pass is turned down as fake proof of payment and we don't say why; if you really paid, call {owner_first} so he can confirm he has seen your payment. {owner_first} can see why it was turned down.
 - After the screenshot is accepted you sign with your name as it shows when money is received (the name your mobile money number is registered in). {owner_first} matches that name, the transaction ID and the amount to the message on his phone, so each person claims their own payment.
 - An accepted screenshot only lets you book a slot. It does not guarantee your service from {owner_first}. After you pay, please call him to confirm he has received your payment, and show it to him when you arrive. He is not responsible for money sent to other people or numbers.
-- The screenshot must be from the last hour: a screenshot saved, or a payment made, more than an hour before you send it is turned down.
+- Upload the payment screenshot soon after you pay, at least within 30 minutes. An old screenshot, or one of an old payment, is turned down.
 - Your booking holds the slot straight away. If {owner_first} hasn't confirmed the payment by the time your slot starts and you aren't at the shop, the booking is cleared. If you did pay, call {owner_first} with your transaction ID.
 - Clients who have booked and paid are served first. Walk-ins are always served last, so booking is the way to secure your slot.
 - Sending a fake or edited proof of payment can get you refused service.
