@@ -1283,12 +1283,12 @@ input[type="file"]::file-selector-button {
 }
 input[type="file"]:hover { border-style: solid; }
 
-/* The amount, big and gold */
+/* The amount: a gold pill, normal size */
 .pay-first .pay-amount { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; }
-.pay-first .pay-amount .small { font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #d3dbea; }
+.pay-first .pay-amount .small { font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #d3dbea; }
 .pay-first .pay-amount b {
-  font-size: 26px; font-weight: 900; padding: 3px 18px; border-radius: 999px; color: #1a1405;
-  background: linear-gradient(180deg, #ffe58f, #f2ac22); box-shadow: 0 6px 20px rgba(240, 178, 50, .42), inset 0 1px 0 rgba(255, 255, 255, .6);
+  font-size: 16px; font-weight: 800; padding: 2px 13px; border-radius: 999px; color: #1a1405;
+  background: linear-gradient(180deg, #ffe58f, #f2ac22); box-shadow: 0 4px 14px rgba(240, 178, 50, .38), inset 0 1px 0 rgba(255, 255, 255, .6);
 }
 
 /* The payment details as a card: what to send, to whom, with the number big and a Copy button */
@@ -1298,11 +1298,16 @@ input[type="file"]:hover { border-style: solid; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .24), 0 0 28px rgba(240, 178, 50, .16);
 }
 .pay-details:empty { display: none; }
-.pd-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 13px 14px; }
+.pd-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
 .pd-row + .pd-row, .pd-note + .pd-row, .pd-row + .pd-note { border-top: 1px solid rgba(255, 255, 255, .18); }
-.pd-label { flex: 0 0 36%; max-width: 36%; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #d3dbea; }
-.pd-value { flex: 1; min-width: 0; font-size: 18px; font-weight: 800; color: #fff; overflow-wrap: anywhere; }
-.pd-value.num { font-family: ui-monospace, Consolas, 'Courier New', monospace; font-size: 21px; letter-spacing: .05em; color: var(--gold-soft); text-shadow: 0 0 16px rgba(240, 178, 50, .55); }
+.pd-label { flex: 0 0 auto; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #d3dbea; white-space: nowrap; }
+.pd-value { flex: 1; min-width: 0; font-size: 17px; font-weight: 800; color: #fff; overflow-wrap: anywhere; text-align: right; }
+@media (max-width: 560px) {
+  .pd-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; }
+  .pd-label { grid-column: 1 / -1; }
+  .pd-value { text-align: left; }
+}
+.pd-value.num { font-family: ui-monospace, Consolas, 'Courier New', monospace; font-size: 20px; letter-spacing: .05em; color: var(--gold-soft); text-shadow: 0 0 16px rgba(240, 178, 50, .55); }
 .pd-note { padding: 13px 14px; font-weight: 700; color: #fff; }
 .pd-copy {
   flex: none; min-height: 38px; padding: 8px 18px; border: 0; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 900;

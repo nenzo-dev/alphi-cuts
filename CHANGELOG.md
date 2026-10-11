@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.15.1 (2026-10-11)
+
+No database change.
+
+- On a phone, each line of the payment details now has its label ("Airtel agent code") on one line with the answer under it, instead of the label breaking onto two lines beside the number. On wider screens the label stays beside the answer.
+- The amount (K50) is a normal-sized gold pill instead of a big one.
+
 ## 2.15.0 (2026-10-11)
 
 No database change.
