@@ -356,9 +356,6 @@ function wireShell() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#admin-chat-form').requestSubmit(); }
   });
   $('#pay-form').addEventListener('submit', savePaymentDetails);
-  $('#sms-save').addEventListener('click', saveSmsAuto);
-  $('#sms-secret').addEventListener('click', makeSmsSecret);
-  $('#sms-setup').addEventListener('click', onSmsCopy);
   $('#payments-table').addEventListener('click', onPaymentAction);
   $('#feedback-list').addEventListener('click', onFeedbackAction);
   $('#requests-list').addEventListener('click', onRequestAction);
@@ -425,7 +422,6 @@ const PAY_LABEL = {
   none: '', requested: 'Wants to pay online', approved: 'Approved, awaiting payment', submitted: 'Paid, to confirm',
   paid: 'Paid', rejected: 'Payment not found',
 };
-const payLabel = (r) => (PAY_LABEL[r.payment_status] || '') + (r.payment_auto && r.payment_status === 'paid' ? ' (checked automatically)' : '');
 const WAITING = ['booked', 'on_deck', 'called', 'checked_in'];
 const shopClock = new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
@@ -440,6 +436,10 @@ function startedNote(r) {
   if (!r.started_at || !['in_chair', 'done'].includes(r.status)) return '';
   return `<div class="small muted">started ${fmtTime(shopClock.format(new Date(r.started_at)))}</div>`;
 }
+
+// The name the client signed with: the one to look for on the owner's phone when the money arrives.
+const paidAs = (r) => (r.payment_proof && r.payment_proof.signed_name
+  ? `<div class="paid-as"><b>Paid as:</b> ${esc(r.payment_proof.signed_name)}</div>` : '');
 
 // A client who paid up front and hasn't been confirmed yet.
 function payTag(r) {
@@ -484,7 +484,7 @@ async function loadQueueTab() {
   $('#queue-table').innerHTML = visible.map((r) => `
     <tr>
       <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
-      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}${payTag(r)}</td>
+      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}${payTag(r)}${r.payment_status === 'submitted' ? paidAs(r) : ''}</td>
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
@@ -504,7 +504,7 @@ async function loadBookingsTab() {
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
-      <td data-label="Payment" class="small muted">${esc(payLabel(r))}${r.payment_ref ? `<div class="pay-ref">${esc(r.payment_ref)}</div>` : ''}</td>
+      <td data-label="Payment" class="small muted">${esc(PAY_LABEL[r.payment_status] || '')}${r.payment_ref ? `<div class="pay-ref">${esc(r.payment_ref)}</div>` : ''}</td>
       <td class="actions">${bookingActions(r, { full: isToday })}</td>
     </tr>`).join('') || '<tr><td colspan="7" class="muted">No bookings that day.</td></tr>';
 }
@@ -626,13 +626,12 @@ async function loadPaymentsTab() {
   if (!editing) $('#pc-instructions').value = details || '';
   $('#pc-required-row').hidden = !(flag && flag[0] && 'require_payment' in flag[0]);
   if (!$('#pc-required-row').hidden && !editing) $('#pc-required').checked = !!flag[0].require_payment;
-  loadSmsCard().catch(() => {});
   lastRows = rows || [];
   $('#payments-table').innerHTML = (rows || []).map((r) => `
     <tr>
       <td data-label="Date">${esc(r.booking_date)}</td>
       <td data-label="Time">${fmtTime(r.slot_time)}</td>
-      <td data-label="Name">${esc(r.client_name)}<div class="small muted">${phoneLink(r.client_phone)}</div></td>
+      <td data-label="Name">${esc(r.client_name)}<div class="small muted">${phoneLink(r.client_phone)}</div>${paidAs(r)}</td>
       <td data-label="Transaction">${r.payment_ref ? `<span class="pay-ref">${esc(r.payment_ref)}</span>` : ''}</td>
       <td data-label="Status"><span class="status-pill ${r.payment_status === 'approved' ? 'status-checked_in' : 'status-called'}">${esc(PAY_LABEL[r.payment_status] || r.payment_status)}</span></td>
       <td class="actions">
@@ -678,98 +677,6 @@ async function onPaymentAction(e) {
   });
 }
 
-// ---------------------------------------------------------------- automatic checking (2.12.0)
-// The owner's phone forwards "money received" messages to record_received_sms(); book_slot() then finds
-// the client's transaction ID among them. Only the secret's hash is kept, so a new secret is shown once.
-let smsSecret = ''; // the secret made in this visit, if any
-
-const ago = (iso) => {
-  const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  if (mins < 48 * 60) return `${Math.round(mins / 60)} h ago`;
-  return `${Math.round(mins / 1440)} days ago`;
-};
-
-function smsSetupHtml() {
-  const url = `${CONFIG.supabase.url}/rest/v1/rpc/record_received_sms`;
-  const headers = `apikey: ${CONFIG.supabase.anonKey}\nAuthorization: Bearer ${CONFIG.supabase.anonKey}\nContent-Type: application/json`;
-  const body = `{"p_secret":"${smsSecret || 'YOUR-SECRET'}","p_from":"{{sender}}","p_text":"{{message}}"}`;
-  const row = (label, text, id) => `<div class="copy-row"><div style="flex:1;min-width:0"><b>${esc(label)}</b><pre>${esc(text)}</pre></div><button type="button" class="btn btn-sm btn-ghost" data-copy="${id}">Copy</button></div>`;
-  return `
-    ${smsSecret ? `<div class="sms-new"><b>Your new secret (shown only now, copy it into your app):</b><pre style="margin:6px 0 0;white-space:pre-wrap;word-break:break-all">${esc(smsSecret)}</pre><button type="button" class="btn btn-sm btn-gold" data-copy="secret" style="margin-top:6px">Copy secret</button></div>` : ''}
-    ${row('Address (POST)', url, 'url')}
-    ${row('Headers', headers, 'headers')}
-    ${row('Body', body, 'body')}`;
-}
-
-async function onSmsCopy(e) {
-  const btn = e.target.closest('[data-copy]');
-  if (!btn) return;
-  const url = `${CONFIG.supabase.url}/rest/v1/rpc/record_received_sms`;
-  const text = {
-    url,
-    headers: `apikey: ${CONFIG.supabase.anonKey}\nAuthorization: Bearer ${CONFIG.supabase.anonKey}\nContent-Type: application/json`,
-    body: `{"p_secret":"${smsSecret || 'YOUR-SECRET'}","p_from":"{{sender}}","p_text":"{{message}}"}`,
-    secret: smsSecret,
-  }[btn.dataset.copy];
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('Copied.');
-  } catch {
-    toast('Select the text and copy it.');
-  }
-}
-
-async function loadSmsCard() {
-  const card = $('#sms-card');
-  let st;
-  try { st = ((await rpc('admin_sms_status')) || [])[0]; } catch { card.hidden = true; return; } // older database
-  if (!st) { card.hidden = true; return; }
-  card.hidden = false;
-  $('#sms-on').checked = !!st.enabled;
-  $('#sms-status').innerHTML = `${st.enabled ? '<b>On.</b>' : '<b>Off.</b>'} ${st.has_secret ? '' : 'No secret made yet. '}${st.last_seen_at ? `Last message from your phone: ${esc(ago(st.last_seen_at))}.` : 'Nothing has come from your phone yet.'}`;
-  $('#sms-setup').innerHTML = smsSetupHtml();
-  const rows = (await rpc('admin_list_sms', { p_limit: 20 })) || [];
-  $('#sms-table').innerHTML = rows.map((r) => {
-    const what = r.kind === 'payment' ? `<b>K${esc(Number(r.amount))}</b> received` : (r.kind === 'ignored' ? 'Not a payment' : 'Could not read it');
-    const who = [r.from_name, r.from_phone].filter(Boolean).join(' ') || '';
-    const msg = r.kind === 'payment' ? '' : `<details><summary class="small">Show message</summary><div class="small muted">${esc(r.body)}</div></details>`;
-    return `<tr>
-      <td data-label="Time" class="small">${esc(ago(r.received_at))}</td>
-      <td data-label="What">${what}${msg}</td>
-      <td data-label="From" class="small">${esc(who)}<div class="muted">${esc(r.sender || '')}</div></td>
-      <td data-label="Transaction"><span class="pay-ref">${esc(r.txn_id || '')}</span></td>
-      <td data-label="Used by" class="small">${r.claimed_by ? esc(r.claimed_name || 'a booking') : (r.kind === 'payment' ? 'Not used yet' : '')}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="5" class="muted">No messages yet.</td></tr>';
-}
-
-async function saveSmsAuto() {
-  const msg = $('#sms-msg');
-  await withBusy($('#sms-save'), async () => {
-    try {
-      await rpc('admin_set_sms_auto', { p_on: $('#sms-on').checked });
-      showMsg(msg, $('#sms-on').checked ? 'On. Clients are now checked against your messages.' : 'Off.', 'ok');
-      await loadSmsCard();
-    } catch (err) {
-      report(err, msg);
-    }
-  });
-}
-
-async function makeSmsSecret() {
-  if (!window.confirm('Make a new secret? Your phone stops working with this site until you put the new secret into its app.')) return;
-  await withBusy($('#sms-secret'), async () => {
-    try {
-      smsSecret = await rpc('admin_new_sms_secret');
-      await loadSmsCard();
-    } catch (err) {
-      report(err);
-    }
-  });
-}
-
 // ---------------------------------------------------------------- payment screenshots (2.12.0)
 const CHECK_LABEL = {
   type: 'A picture file', size: 'Normal file size', pixels: 'Phone-screenshot size', edited: 'Not made or changed in an editing app',
@@ -798,6 +705,7 @@ async function showProof(row) {
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Payment screenshot">
         <button type="button" class="modal-close" id="proof-close" aria-label="Close">&times;</button>
         <h3>${esc(row.client_name)} &middot; ${esc(fmtTime(row.slot_time))}</h3>
+        ${p.signed_name ? `<div class="sign-card" style="margin:10px 0"><b>Signed as: ${esc(p.signed_name)}</b><div class="small">On your phone, the message when this money arrived should say <b>received from ... ${esc(p.signed_name)}</b>, with the same transaction ID (${esc(x.txn_id || 'see below')}) and amount.${p.name_seen ? ' This name is also in the screenshot.' : ''}</div></div>` : ''}
         <p class="small muted">Look at the screenshot and at your own payment messages. The details below were read by the client's phone and are only a check for obvious problems.</p>
         ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="Payment screenshot" style="max-width:100%;max-height:55vh;border-radius:10px;display:block;margin:8px auto"></a>` : '<p class="muted">The screenshot could not be loaded.</p>'}
         <table class="proof-facts">
@@ -812,6 +720,7 @@ async function showProof(row) {
           ${line('Type and size', `${(f.kind || '').toUpperCase()} ${f.size ? kb(f.size) : ''}`.trim() || 'Unknown')}
           ${line('Pixels', f.width ? `${f.width} x ${f.height}` : 'Unknown')}
           ${line('File saved', when(f.modified))}
+          ${line('Sent to us', when(row.payment_submitted_at))}
           ${line('Made with', [m.software, m.xmp].filter(Boolean).join(', ') || 'No editing app found')}
           ${line('Camera', [m.make, m.model].filter(Boolean).join(' ') || (m.exposure ? 'Camera settings found' : 'None'))}
           ${m.taken ? line('Taken', m.taken) : ''}

@@ -879,10 +879,17 @@ html.fx-lite .notify-dock { background: rgba(34, 31, 27, .97); }
 }
 .pay-first input[type=file] { margin-bottom: 0; padding: 10px; font-size: 14px; }
 .pay-priority { margin: 10px 0 0; }
-.txn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
-.txn-row input { flex: 1 1 100%; min-width: 0; margin-bottom: 0; }
-.txn-row .btn { flex: 1 1 100%; white-space: nowrap; }
-#bk-auto + #bk-proof-label { margin-top: 16px; }
+.sign-box { margin-top: 14px; }
+.pay-warning {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+  border: 1px solid rgba(224, 96, 90, .5); background: linear-gradient(135deg, rgba(224, 96, 90, .14), rgba(224, 96, 90, .04));
+}
+.pay-warning p { margin: 0 0 6px; font-weight: 600; }
+.pay-warning .btn { margin-top: 2px; }
+.sign-box input { margin-bottom: 0; text-transform: uppercase; }
+.sign-box p { margin: 6px 0 0; }
+.paid-as { font-size: 13px; margin-top: 2px; }
+.paid-as b { color: var(--gold-soft); }
 .proof-status { margin-top: 12px; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--line); background: var(--ink); font-size: 14px; }
 .proof-status.busy { border-color: rgba(232, 200, 102, .45); }
 .proof-status.ok { border-color: rgba(76, 175, 125, .55); background: linear-gradient(135deg, rgba(76, 175, 125, .16), rgba(76, 175, 125, .04)); }
@@ -902,13 +909,8 @@ html.fx-lite .notify-dock { background: rgba(34, 31, 27, .97); }
 .proof-status details { margin-top: 6px; }
 .proof-status summary { cursor: pointer; color: var(--gold-soft); font-size: 13px; }
 .proof-call { display: inline-block; margin-top: 6px; }
-.sms-steps { padding-left: 20px; }
-.sms-steps li { margin: 6px 0; }
-.sms-setup { margin: 12px 0; }
-.sms-setup .copy-row { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
-.sms-setup .copy-row b { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
-.sms-setup pre { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap; word-break: break-all; background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
-.sms-new { border: 1px solid rgba(232, 200, 102, .55); background: rgba(232, 200, 102, .1); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
+.sign-card { border: 1px solid rgba(232, 200, 102, .55); background: rgba(232, 200, 102, .1); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.bad-text { color: var(--bad); }
 .bk-slots { border: 0; padding: 0; margin: 0; min-width: 0; }
 .bk-slots[disabled] { opacity: .4; pointer-events: none; }
 .pay-locked { margin: 0 0 8px; }

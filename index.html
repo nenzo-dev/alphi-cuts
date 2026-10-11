@@ -133,17 +133,20 @@
           <p class="small muted" id="bk-pay-intro" data-c="pay_first_intro">Send the price to the details below, then upload a screenshot of your payment.</p>
           <p class="pay-amount"><span class="muted small">Amount</span> <b id="bk-pay-amount"></b></p>
           <pre id="bk-pay-details"></pre>
-          <div id="bk-auto" hidden>
-            <label for="bk-txn" data-c="pay_txn_label">Transaction ID from your payment message</label>
-            <div class="txn-row">
-              <input id="bk-txn" name="txn" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false">
-              <button type="button" class="btn btn-gold btn-sm" id="bk-check" data-c="pay_check_button">Check my payment</button>
-            </div>
-            <div id="bk-txn-status" class="proof-status" aria-live="polite" hidden></div>
+          <div class="pay-warning" id="bk-pay-warning">
+            <p data-c="pay_warning">An accepted screenshot lets you book a slot. It does not guarantee your service. Call the owner after paying to confirm he has received your payment.</p>
+            <a class="btn btn-ghost btn-sm" id="bk-warn-call" href="#" hidden>Call</a>
           </div>
           <label for="bk-proof" id="bk-proof-label" data-c="pay_proof_label">Screenshot of your payment</label>
           <input id="bk-proof" name="proof" type="file" accept="image/png,image/jpeg,image/webp,image/*">
+          <p class="small muted" data-c="pay_fresh_note" style="margin:6px 0 0">The screenshot must be from the last hour, and each screenshot or payment can only be used once.</p>
           <div id="bk-proof-status" class="proof-status" aria-live="polite" hidden></div>
+          <div id="bk-sign" class="sign-box" hidden>
+            <label for="bk-signname" data-c="pay_name_label">Sign with your name as it shows when money is received</label>
+            <input id="bk-signname" name="signname" maxlength="60" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. RUTH LUNGU">
+            <p class="small muted" data-c="pay_name_hint">The name Mr Alfred sees when your money arrives.</p>
+            <p class="small" id="bk-sign-note" aria-live="polite"></p>
+          </div>
           <p class="small muted pay-priority" data-c="pay_priority">Booked and paid clients are served first. Walk-ins are always served last.</p>
         </div>
         <p id="bk-locked" class="small muted pay-locked" data-c="pay_locked" hidden></p>
@@ -301,7 +304,7 @@
       <a href="disclaimer">Disclaimer</a>
       <a href="admin">Owner login</a>
     </nav>
-    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.12.0</span></p>
+    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.12.1</span></p>
   </div>
 </footer>
 

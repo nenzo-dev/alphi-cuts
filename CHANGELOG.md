@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.12.1 (2026-10-11)
+
+Run `supabase/migrations/18_sign_name_drop_sms.sql` once in the Supabase SQL editor, after 17.
+
+- After a payment screenshot is accepted, the client **signs with their name as it shows when money
+  is received**: the name their mobile money number is registered in (for Airtel, what Mr Alfred's phone
+  shows after "received from"). The owner sees it as "Paid as" in Payments, the queue and View proof,
+  and matches it, the transaction ID (TID) and the amount to the message on his phone, so each person
+  claims their own payment. The page also tells the client whether the name is in their screenshot (it
+  often isn't, and that is fine). The database refuses a booking without a first and last name.
+- The wording is clear that an accepted screenshot only lets you book a slot: it does not guarantee
+  service from Mr Alfred. The payment box carries a warning with a Call button, and the accepted
+  message, the booking confirmation and the ticket all tell the client to call him to confirm he has
+  received the payment, and that he is not responsible for money sent to other people or numbers. The
+  terms say the same.
+- A screenshot, or its transaction ID, can only ever back one booking. The page now says so as soon as
+  the screenshot is picked (proof_in_use), not after the form is filled in. Cancelling no longer gives
+  the payment back: only a payment the owner marked "Not received" is free again.
+- Nothing older than an hour: the screenshot file must have been saved in the last hour, and the payment
+  on it (the time in an Airtel transaction ID, or the time beside the date) must be at most an hour old
+  and not in the future (10 minutes' difference between phone clocks is allowed). The database checks it
+  too.
+- Checked against a real Airtel "received" message from Mr Alfred's phone: Airtel writes dates month
+  first (10-11-2026 is 11 October, not 10 November), and the transaction ID carries its own date and time
+  (CO261011.1254.A33706 is 11 Oct 2026 at 12:54). The reader now understands both, takes the date from
+  the ID, and turns a screenshot down when the date written on it disagrees with the ID's date. "Comm"
+  (commission) is no longer mistaken for the amount.
+- The SMS-forwarding way of checking payments (2.12.0, part 2) is removed: Mr Alfred's phone can't
+  forward messages. Its card in Payments, its page code and its tables and functions are gone
+  (migration 18). The screenshot way, the owner's confirmation, and "Book a client in" stay.
+
 ## 2.12.0 (2026-10-11)
 
 Pay first with a screenshot, and walk-ins come last. Run `supabase/migrations/16_payment_screenshots.sql`

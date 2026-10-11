@@ -199,37 +199,10 @@
         <div class="check-row" id="pc-required-row">
           <label><input type="checkbox" id="pc-required"> Clients must pay before they can book</label>
         </div>
-        <p class="hint">When this is on, a client pays you first, uploads a screenshot of the payment, and only then sees the free times. We read the screenshot (who was paid, the amount, the transaction ID, the date and the file's own details) and turn down obvious fakes. Their booking holds the slot and shows below until you mark it paid. If you can't find the payment, tap Not received and the slot is free again. A booking you haven't confirmed by its slot time is cleared (unless the client is already at the shop). Clients with a booking are served before walk-ins.</p>
+        <p class="hint">When this is on, a client pays you first, uploads a screenshot of the payment and signs with their name, and only then sees the free times. We read the screenshot (who was paid, the amount, the transaction ID, the date and the file's own details) and turn down obvious fakes. Their booking holds the slot and shows below until you mark it paid. Each shows the name they signed with: it should be the name you see on your phone when the money arrives, with the same transaction ID (TID) and amount. If you can't find the payment, tap Not received and the slot is free again. A booking you haven't confirmed by its slot time is cleared (unless the client is already at the shop). Clients with a booking are served before walk-ins.</p>
         <button class="btn btn-gold" type="submit" id="pc-save" style="margin-top:12px">Save payment details</button>
         <div id="pc-msg"></div>
       </form>
-      <div class="card" id="sms-card" hidden>
-        <h3>Check payments automatically</h3>
-        <p class="payment-note">Your phone sends each mobile-money "money received" message to this site. When a client pays and types their transaction ID, the site finds that payment among your messages and books them in as paid, with nothing for you to confirm. A made-up transaction ID can't be found, so this can't be faked from the booking page. Only messages from mobile-money and bank senders are kept; other messages are dropped.</p>
-        <p class="small" id="sms-status"></p>
-        <div class="check-row">
-          <label><input type="checkbox" id="sms-on"> Check payments automatically (clients type their transaction ID)</label>
-        </div>
-        <p class="hint">Switch this on only after your phone has sent a message here (see below). If your phone is off or out of data, nothing arrives and clients can't book. Switch it off and the screenshot way takes over.</p>
-        <button class="btn btn-gold btn-sm" type="button" id="sms-save">Save</button>
-        <div id="sms-msg"></div>
-        <h4 style="margin-top:20px">Set up your phone (once)</h4>
-        <ol class="small sms-steps">
-          <li>On the phone that receives the money, install an app that forwards text messages to a web address (search the Play Store for "SMS forwarder" or "SMS to webhook"). Allow it to read your messages and keep it running in the background.</li>
-          <li>Make a secret below, then add a forwarding rule with the address, headers and message body shown. Use your app's own names for "the sender" and "the message text" where the body says <code>{{sender}}</code> and <code>{{message}}</code>.</li>
-          <li>Set the rule to forward only messages from your mobile-money numbers (for example Airtel Money, MTN MoMo, Zamtel) or banks, so your other messages stay private.</li>
-          <li>Send yourself some money (or wait for the next payment). It should appear under "Messages received" below, and "Last message from your phone" above should update. Then switch on the box above.</li>
-        </ol>
-        <div id="sms-setup" class="sms-setup"></div>
-        <button class="btn btn-ghost btn-sm" type="button" id="sms-secret">Make a new secret</button>
-        <h4 style="margin-top:20px">Messages received</h4>
-        <div class="table-wrap">
-          <table class="stack">
-            <thead><tr><th>Time</th><th>What</th><th>From</th><th>Transaction</th><th>Used by</th></tr></thead>
-            <tbody id="sms-table"></tbody>
-          </table>
-        </div>
-      </div>
       <div class="card">
         <h3>Waiting for you</h3>
         <div class="table-wrap">

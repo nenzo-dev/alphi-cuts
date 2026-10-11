@@ -16,7 +16,7 @@ import { openSounds } from './lib/soundui.js';
 import { configureAlarms, updateAlarms, startsIn } from './lib/alarm.js';
 import { bookingIcs, downloadFile } from './lib/ics.js';
 import { prepareImage } from './lib/image.js';
-import { readFileInfo, readText, parseProofText, judgeProof, buildProof, accountNumbers, MAX_BYTES } from './lib/proof.js';
+import { readFileInfo, readText, parseProofText, judgeProof, buildProof, accountNumbers, validSignedName, nameInText, MAX_BYTES } from './lib/proof.js';
 import { watchAppUpdate } from './lib/appupdate.js';
 import { syncPush } from './lib/push.js';
 import { initNotifyUi, notifyState, showDock, openPanel, turnOnFromPage } from './lib/notifyui.js';
@@ -399,7 +399,7 @@ async function loadPayInfo() {
     row = null; // the database has no pay-first yet; asked again next time, so it starts once it has
   }
   row = Array.isArray(row) ? row[0] : row;
-  const next = row ? { required: !!row.required, instructions: row.instructions || '', amount_kwacha: Number(row.amount_kwacha), auto: !!row.auto } : null;
+  const next = row ? { required: !!row.required, instructions: row.instructions || '', amount_kwacha: Number(row.amount_kwacha) } : null;
   const changed = JSON.stringify(next) !== JSON.stringify(payInfo);
   payInfo = next;
   storageSet(PAY_KEY, JSON.stringify(next));
@@ -407,11 +407,10 @@ async function loadPayInfo() {
 }
 
 const payRequired = () => !!(payInfo && payInfo.required);
-const payAuto = () => !!(payInfo && payInfo.required && payInfo.auto);   // checked against the owner's received messages
 const proofOk = () => !!(proof && proof.status === 'approved');
-const txnValue = () => $('#bk-txn').value.trim();
-const txnOk = () => !!(txnState && txnState.status === 'ok' && txnState.txn.toLowerCase() === txnValue().toLowerCase());
-const payVerified = () => (payAuto() ? txnOk() : proofOk());
+const signedName = () => $('#bk-signname').value.trim().replace(/\s+/g, ' ');
+const nameOk = () => validSignedName(signedName());
+const payVerified = () => proofOk() && nameOk();   // an accepted screenshot, signed with a name
 
 function renderPayFirst() {
   if (!cfg) return;
@@ -420,12 +419,11 @@ function renderPayFirst() {
   if (on) {
     $('#bk-pay-amount').textContent = `K${Number(payInfo.amount_kwacha).toFixed(0)}`;
     $('#bk-pay-details').textContent = payInfo.instructions;
-    $('#bk-pay-intro').textContent = t(payAuto() ? 'pay_auto_intro' : 'pay_first_intro');
-    $('#bk-proof-label').textContent = t(payAuto() ? 'pay_proof_label_auto' : 'pay_proof_label');
+    const call = $('#bk-warn-call');
+    call.hidden = !callTel();
+    if (callTel()) { call.href = `tel:${callTel()}`; call.textContent = `Call ${ownerFirst()}`; }
   }
-  $('#bk-auto').hidden = !(on && payAuto());
   renderProof();
-  renderTxn();
   updatePayLock();
 }
 
@@ -433,67 +431,19 @@ function updatePayLock() {
   const locked = payRequired() && !payVerified();
   $('#bk-slots').disabled = locked;
   $('#bk-locked').hidden = !locked;
-  $('#bk-locked').textContent = t(payAuto() ? 'pay_locked_auto' : 'pay_locked');
+  $('#bk-sign').hidden = !(payRequired() && proofOk());
+  onSignNote();
 }
 
-// ---- automatic checking: the transaction ID is looked for among the messages on the owner's phone
-let txnState = null; // null, or { txn, status: 'looking' | 'ok' | 'none' | 'giveup' | 'low' | 'used', note }
-let txnRun = 0;
-
-function renderTxn() {
-  const box = $('#bk-txn-status');
-  if (!payAuto() || !txnState) { box.hidden = true; box.innerHTML = ''; box.className = 'proof-status'; return; }
-  const st = txnState.status;
-  box.hidden = false;
-  const note = txnState.note ? `<p class="small muted">${esc(txnState.note)}</p>` : '';
-  if (st === 'ok') {
-    box.className = 'proof-status ok';
-    box.innerHTML = `<h4>${esc(t('pay_found'))}</h4>${note}<p><b>${esc(t('pay_proof_show'))}</b></p>`;
-  } else if (st === 'looking' || st === 'none') {
-    box.className = 'proof-status busy';
-    box.innerHTML = `<div>${esc(t(st === 'none' ? 'pay_none' : 'pay_checking'))}&hellip;</div><div class="proof-bar"><i style="width:${Math.min(100, Math.round(((txnState.tries || 0) / 30) * 100))}%"></i></div>${note}`;
-  } else if (st === 'readfail') {
-    box.className = 'proof-status bad';
-    box.innerHTML = `<p>${esc(txnState.note)}</p>`;
-  } else if (st === 'giveup') {
-    box.className = 'proof-status bad';
-    box.innerHTML = `<h4>${esc(t('pay_giveup'))}</h4>${note}${callHtml()}`;
-  } else {
-    box.className = 'proof-status bad';
-    box.innerHTML = `<h4>${esc(t(st === 'low' ? 'pay_low' : 'pay_used'))}</h4>${note}${callHtml()}`;
-  }
-}
-
-async function checkTxn(note = '') {
-  const txn = txnValue();
-  const run = ++txnRun;
-  if (txn.length < 5) { txnState = null; renderTxn(); updatePayLock(); return; }
-  txnState = { txn, status: 'looking', tries: 0, note };
-  renderTxn();
-  updatePayLock();
-  // The message can reach the owner's phone a little after the payment, so it keeps looking for about two minutes.
-  for (let tries = 0; tries < 30; tries++) {
-    let answer;
-    try {
-      answer = await rpc('check_payment', { p_txn: txn });
-    } catch {
-      answer = 'none';
-    }
-    if (run !== txnRun) return;
-    if (answer === 'ok' || answer === 'low' || answer === 'used') {
-      txnState = { txn, status: answer, note };
-      renderTxn();
-      updatePayLock();
-      return;
-    }
-    txnState = { txn, status: 'none', tries: tries + 1, note };
-    renderTxn();
-    await new Promise((r) => setTimeout(r, 4000));
-    if (run !== txnRun) return;
-  }
-  txnState = { txn, status: 'giveup', note };
-  renderTxn();
-  updatePayLock();
+// Says whether the name signed can be seen in the screenshot (it often can't: that is normal).
+function onSignNote() {
+  const note = $('#bk-sign-note');
+  const typed = signedName();
+  if (!proofOk() || !typed) { note.textContent = ''; return; }
+  if (!nameOk()) { note.textContent = t('pay_name_bad'); note.className = 'small bad-text'; return; }
+  const seen = nameInText(typed, proof.ocr.text);
+  note.textContent = t(seen ? 'pay_name_seen' : 'pay_name_unseen');
+  note.className = 'small muted';
 }
 
 // ---- the screenshot: read, checked, shown to the client before they book
@@ -502,6 +452,16 @@ let proofRun = 0;
 
 const fmtBytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const fmtWhen = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { timeZone: CONFIG.timeZone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not shown');
+
+function callTel() {
+  const tel = String((cfg && cfg.phone) || '').replace(/[^\d+]/g, '');
+  return tel.length >= 9 ? tel : '';
+}
+
+function callBtnHtml() {
+  const tel = callTel();
+  return tel ? `<a class="btn btn-gold btn-sm proof-call" href="tel:${esc(tel)}">Call ${esc(ownerFirst())}</a>` : '';
+}
 
 function callHtml() {
   const tel = String((cfg && cfg.phone) || '').replace(/[^\d+]/g, '');
@@ -559,42 +519,11 @@ function renderProof() {
     box.className = 'proof-status ok';
     box.innerHTML = `<h4>${esc(t('pay_proof_ok'))}</h4>${factsHtml(proof)}
       ${proof.judged.warnings.length ? `<p class="small muted">Not clear in the picture: ${esc(proof.judged.warnings.join(' '))}</p>` : ''}
-      <p><b>${esc(t('pay_proof_show'))}</b></p>`;
+      <p><b>${esc(t('pay_proof_show'))}</b></p>${callBtnHtml()}`;
   } else {
     box.className = 'proof-status bad';
     box.innerHTML = `<h4>${esc(t('pay_proof_bad'))}</h4>
       <ul>${proof.judged.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>${factsHtml(proof)}${callHtml()}`;
-  }
-}
-
-async function readIdFromScreenshot(file, run) {
-  proof = { status: 'busy', pct: 0.02, label: 'Reading your screenshot' };
-  renderProof();
-  try {
-    const ocr = await readText(file, (pct, label) => {
-      if (run !== proofRun) return;
-      proof = { status: 'busy', pct, label };
-      renderProof();
-    });
-    if (run !== proofRun) return;
-    const parsed = parseProofText(ocr.text, { ownerName: cfg.owner_name, accountNumbers: accountNumbers(payInfo.instructions), today: todayISO() });
-    proof = null;
-    renderProof();
-    if (parsed.txn_id) {
-      $('#bk-txn').value = parsed.txn_id;
-      checkTxn(t('pay_read_id', { ref: parsed.txn_id })).catch(() => {});
-    } else {
-      txnState = { txn: txnValue(), status: 'readfail', note: t('pay_read_fail') };
-      renderTxn();
-      updatePayLock();
-    }
-  } catch {
-    if (run !== proofRun) return;
-    proof = null;
-    renderProof();
-    txnState = { txn: txnValue(), status: 'readfail', note: t('pay_read_fail') };
-    renderTxn();
-    updatePayLock();
   }
 }
 
@@ -603,7 +532,6 @@ async function onProofPicked() {
   const run = ++proofRun;
   proof = null;
   if (!file || !cfg || !payInfo) { renderProof(); updatePayLock(); return; }
-  if (payAuto()) { await readIdFromScreenshot(file, run); return; }
   proof = { status: 'busy', pct: 0.02, label: 'Checking the file' };
   renderProof();
   updatePayLock();
@@ -621,7 +549,18 @@ async function onProofPicked() {
     if (run !== proofRun) return;
     const ctx = { ownerName: cfg.owner_name, accountNumbers: accountNumbers(payInfo.instructions), today: todayISO() };
     const parsed = parseProofText(ocr.text, ctx);
-    const judged = judgeProof({ file: info, ocr, parsed }, { price: payInfo.amount_kwacha, ownerName: cfg.owner_name, today: todayISO() });
+    const judged = judgeProof({ file: info, ocr, parsed }, { price: payInfo.amount_kwacha, ownerName: cfg.owner_name, today: todayISO(), nowMin: nowMinutesInShopTz() });
+    if (judged.verdict === 'approved') {
+      // Used already (by anyone, even in a booking since cancelled)? Better to say so now than after they have filled in the form.
+      let used = false;
+      try { used = (await rpc('proof_in_use', { p_hash: info.sha256, p_txn: parsed.txn_id })) === true; } catch { /* an older database: the booking checks it */ }
+      if (run !== proofRun) return;
+      if (used) {
+        judged.verdict = 'rejected';
+        judged.reasons.push(t('pay_proof_used'));
+        judged.checks.push({ id: 'unused', label: 'Not used for another booking', ok: false, detail: t('pay_proof_used'), hard: true });
+      }
+    }
     proof = { status: judged.verdict, file, info, ocr, parsed, judged, path: '' };
   } catch {
     if (run !== proofRun) return;
@@ -717,9 +656,14 @@ async function submitBooking(e) {
   const slot = $('#bk-slot').value;
   const name = $('#bk-name').value.trim();
   const phone = $('#bk-phone').value.trim();
-  if (payRequired() && !payVerified()) {
-    showMsg(msg, t(payAuto() ? 'pay_locked_auto' : 'pay_locked'), 'error');
-    (payAuto() ? $('#bk-txn') : $('#bk-proof')).focus();
+  if (payRequired() && !proofOk()) {
+    showMsg(msg, t('pay_locked'), 'error');
+    $('#bk-proof').focus();
+    return;
+  }
+  if (payRequired() && !nameOk()) {
+    showMsg(msg, t('pay_name_bad'), 'error');
+    $('#bk-signname').focus();
     return;
   }
   if (!date || !slot) { showMsg(msg, 'Please pick a day and a time.', 'error'); return; }
@@ -735,9 +679,7 @@ async function submitBooking(e) {
     try {
       const args = { p_date: date, p_slot: slot, p_name: name, p_phone: phone, p_style: selectedStyle || null };
       const paid = payRequired();
-      if (paid && payAuto()) {
-        args.p_pay_ref = txnState.txn;
-      } else if (paid) {
+      if (paid) {
         if (!proof.path) {
           try {
             proof.path = await uploadProof(proof);
@@ -747,7 +689,7 @@ async function submitBooking(e) {
           }
         }
         args.p_pay_ref = proof.parsed.txn_id;
-        args.p_proof = buildProof({ file: proof.info, ocr: proof.ocr, parsed: proof.parsed, judged: proof.judged, path: proof.path });
+        args.p_proof = buildProof({ file: proof.info, ocr: proof.ocr, parsed: proof.parsed, judged: proof.judged, path: proof.path, signedName: signedName(), nameSeen: nameInText(signedName(), proof.ocr.text) });
       }
       // Older databases don't take p_device yet.
       const token = await rpcOr('book_slot', { ...args, p_device: deviceToken() }, () => rpc('book_slot', args), 'book_slot+device');
@@ -760,13 +702,10 @@ async function submitBooking(e) {
       $('#bk-name').value = '';
       $('#bk-phone').value = '';
       $('#bk-proof').value = '';
-      $('#bk-txn').value = '';
+      $('#bk-signname').value = '';
       proofRun++;
-      txnRun++;
       proof = null;
-      txnState = null;
       renderProof();
-      renderTxn();
       updatePayLock();
       setStyle('');
       invalidateDays();
@@ -896,8 +835,8 @@ function paymentHtml(b) {
       // With pay-first on, everyone pays up front, so there is no "pay online instead".
       return closed || b.status === 'done' || startsIn(b) <= 0 || payRequired() ? '' : `<button type="button" class="link-btn" data-act="pay" data-token="${token}">Pay online instead</button>`;
     case 'submitted':
-      if (closed) return `<p class="small pay-expired">${esc(t('pay_unconfirmed', { time: fmtTime(b.slot_time) }))}</p>`;
-      return `<p class="small muted">${esc(t('pay_confirming', { ref: b.payment_ref || '', time: fmtTime(b.slot_time) }))}</p>`;
+      if (closed) return `<p class="small pay-expired">${esc(t(b.payment_expired_at ? 'pay_unconfirmed' : 'pay_cancelled', { time: fmtTime(b.slot_time) }))}</p>${callBtnHtml()}`;
+      return `<p class="small muted">${esc(t('pay_confirming', { ref: b.payment_ref || '', name: (b.payment_proof && b.payment_proof.signed_name) || '', time: fmtTime(b.slot_time) }))}</p>${callBtnHtml()}`;
     case 'rejected':
       return `<p class="small pay-expired">${esc(t('pay_not_found', { time: fmtTime(b.slot_time) }))}</p>`;
     case 'requested':
@@ -1210,7 +1149,7 @@ async function onTicketAction(e) {
       break;
     case 'cancel':
       if (!window.confirm(b && ['submitted', 'paid'].includes(b.payment_status)
-        ? `Cancel this booking? Your payment is not refunded automatically. Talk to ${ownerFirst()} about it.`
+        ? `Cancel this booking? Your payment is not refunded automatically and can't be used for another booking. Talk to ${ownerFirst()} about it.`
         : 'Cancel this booking?')) return;
       await withBusy(btn, async () => {
         try {
@@ -1401,9 +1340,7 @@ function wire() {
   $('#sr-form').addEventListener('submit', submitStyleRequest);
   $('#bk-date').addEventListener('change', refreshSlotOptions);
   $('#bk-proof').addEventListener('change', onProofPicked);
-  $('#bk-check').addEventListener('click', () => checkTxn().catch(() => {}));
-  $('#bk-txn').addEventListener('input', () => { txnRun++; txnState = null; renderTxn(); updatePayLock(); });
-  $('#bk-txn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checkTxn().catch(() => {}); } });
+  $('#bk-signname').addEventListener('input', updatePayLock);
   $('#booking-form').addEventListener('submit', submitBooking);
   $('#my-booking-body').addEventListener('click', onTicketAction);
   $('#review-form').addEventListener('submit', submitReview);

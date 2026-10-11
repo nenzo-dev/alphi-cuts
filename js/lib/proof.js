@@ -13,8 +13,8 @@ const OCR_BASE = new URL('../../vendor/tesseract/', import.meta.url).href;
 
 export const MAX_BYTES = 8 * 1024 * 1024;
 const MIN_BYTES = 20 * 1024;
-const MAX_FILE_AGE_DAYS = 3;       // the picture was saved within the last few days
-const MAX_PAYMENT_AGE_DAYS = 2;    // and shows a payment from today or the last two days
+const MAX_AGE_MIN = 60;            // the screenshot, and the payment on it, are at most an hour old
+const FUTURE_SLACK_MIN = 10;       // phone clocks differ a little
 
 // Editing apps. A payment screenshot is made by the phone itself, not by one of these.
 const EDITORS = /photoshop|adobe|canva|picsart|snapseed|pixlr|gimp|lightroom|figma|paint\.net|fotor|photoroom|meitu|beautyplus|facetune|inshot|picmonkey|affinity|sketch|krita|capcut|remini|ibis ?paint|polarr|vsco|photopea|lunapic/i;
@@ -304,7 +304,14 @@ function findDates(text, today) {
   const iso = /\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/g;
   while ((m = iso.exec(text))) push(+m[1], +m[2], +m[3]);
   const dmy = /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/g;
-  while ((m = dmy.exec(text))) push(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2], +m[1]);
+  while ((m = dmy.exec(text))) {
+    const a = +m[1];
+    const b = +m[2];
+    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    if (a > 12) push(y, b, a);          // 25-10-2026: day first
+    else if (b > 12) push(y, a, b);     // 10-25-2026: month first
+    else { push(y, b, a); if (a !== b) push(y, a, b); }   // 10-11-2026 can be read either way (Airtel writes it month first)
+  }
   const named = /\b(\d{1,2})(?:st|nd|rd|th)?[\s,.-]+(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?(?:[\s,.-]+(20\d{2}|\d{2})(?![\d:]))?\b/gi;
   while ((m = named.exec(text))) {
     const year = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : null;
@@ -367,7 +374,7 @@ export function parseProofText(raw, ctx = {}) {
     money.lastIndex = 0;
     while ((m = money.exec(line))) {
       const before = line.slice(Math.max(0, m.index - 22), m.index).toLowerCase();
-      if (/(fee|fees|charge|charges|balance|bal|tax|commission|available|limit|cashback|bonus)[^0-9]{0,14}$/.test(before)) continue;
+      if (/(fee|fees|charge|charges|balance|bal|tax|commission|comm|available|limit|cashback|bonus)[^0-9]{0,14}$/.test(before)) continue;
       const value = numberFrom((m[1] || m[2]).trim());
       if (!Number.isFinite(value) || value <= 0 || value > 1000000) continue;
       const near = `${lines[idx - 1] || ''} ${line}`.toLowerCase();
@@ -388,12 +395,33 @@ export function parseProofText(raw, ctx = {}) {
     const airtel = /\b([A-Z]{2}\d{6}\.\d{4}\.[A-Z0-9]{4,8})\b/i.exec(flat);
     if (airtel) txnId = airtel[1].toUpperCase();
   }
+  // An Airtel transaction ID carries its own date and time: CO261011.1254.A33706 is 11 Oct 2026, 12:54.
+  let tidDate = '';
+  let tidTime = '';
+  const tm = /^[A-Z]{2}(\d{2})(\d{2})(\d{2})\.(\d{2})(\d{2})\./.exec(txnId);
+  if (tm && validDay(2000 + +tm[1], +tm[2], +tm[3]) && +tm[4] < 24 && +tm[5] < 60) {
+    tidDate = isoOf(2000 + +tm[1], +tm[2], +tm[3]);
+    tidTime = `${tm[4]}:${tm[5]}`;
+  }
 
   // ---- when
   const dates = findDates(flat, today);
-  const date = dates.length ? dates.sort().slice(-1)[0] : (/\btoday\b/i.test(flat) ? today : (/\byesterday\b/i.test(flat) ? addDays(today, -1) : ''));
+  // Of the readings of a date, the one nearest today that isn't in the future.
+  const nearness = (iso) => { const d = dayNumber(today) - dayNumber(iso); return d < -1 ? 1000 - d : Math.abs(d); };
+  const seen = dates.length ? dates.slice().sort((x, y) => nearness(x) - nearness(y))[0] : (/\btoday\b/i.test(flat) ? today : (/\byesterday\b/i.test(flat) ? addDays(today, -1) : ''));
+  const date = tidDate || seen;
   const t = /\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\s*([ap]m)?/i.exec(flat);
-  const time = t ? `${pad(+t[1])}:${t[2]}${t[3] ? ` ${t[3].toUpperCase()}` : ''}` : '';
+  const time = t ? `${pad(+t[1])}:${t[2]}${t[3] ? ` ${t[3].toUpperCase()}` : ''}` : tidTime;
+  // The time of the payment itself: inside the ID, else on the same line as a date. (The first clock on a
+  // screenshot is the phone's status bar: when the screenshot was taken, not when it was paid.)
+  const hm24 = (mt) => `${pad(mt[3] ? (+mt[1] % 12) + (/p/i.test(mt[3]) ? 12 : 0) : +mt[1])}:${mt[2]}`;
+  let payTime = tidTime;
+  if (!payTime) {
+    for (const line of lines) {
+      const lt = /\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\s*([ap]m)?/i.exec(line);
+      if (lt && (findDates(line, today).length > 0 || /\b(today|yesterday)\b/i.test(line))) { payTime = hm24(lt); break; }
+    }
+  }
 
   // ---- status, network, numbers
   const bad = [...new Set((flat.match(/\b(fail(?:ed|ure)?|declined|rejected|insufficient|cancel(?:led)?|reversed|pending|unsuccessful|error|expired|not\s+(?:sent|completed|successful)|invalid)\b/gi) || []).map((w) => w.toLowerCase()))];
@@ -414,8 +442,11 @@ export function parseProofText(raw, ctx = {}) {
     amounts: amounts.slice(0, 6).map((a) => a.value),
     txn_id: txnId,
     date,
+    tid_date: tidDate,
+    text_dates: dates,
     date_found: dates.length > 0 || !!date,
-    time,
+    time: payTime || time,
+    pay_time: payTime,
     network,
     status_bad: bad,
     status_good: good,
@@ -448,9 +479,10 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   add('edited', 'It was not made or changed in an editing app', !editor, editor ? `Its details say it was made or changed with ${editor}.` : '');
   const camera = !!(m.exposure || m.aperture || m.iso);
   add('camera', 'It is a screenshot, not a photo of a screen', !camera, 'This looks like a photo taken with a camera. Please send a screenshot.');
-  const ageDays = file.modified ? (now.getTime() - Date.parse(file.modified)) / 86400000 : 0;
-  add('fresh', 'The file was saved recently', !(file.modified && ageDays > MAX_FILE_AGE_DAYS && Date.parse(file.modified) > 86400000),
-    `This file was saved ${Math.floor(ageDays)} days ago. Please send a screenshot from your new payment.`);
+  const agoText = (min) => (min < 120 ? `${Math.round(min)} minutes` : `${Math.round(min / 60)} hours`);
+  const fileAge = file.modified && Date.parse(file.modified) > 86400000 ? (now.getTime() - Date.parse(file.modified)) / 60000 : 0;
+  add('fresh', 'The screenshot was taken in the last hour', !(file.modified && fileAge > MAX_AGE_MIN),
+    `This screenshot was saved ${agoText(fileAge)} ago. It must be from the last hour, so please send a screenshot of a new payment.`);
   const readable = (ocr.words || 0) >= 12 && (ocr.confidence || 0) >= 45;
   add('readable', 'The writing is clear enough to read', readable, 'We could not read the writing clearly. Please send a full, sharp screenshot of the payment message.');
 
@@ -470,11 +502,21 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   let dateOk = true;
   let dateDetail = '';
   if (parsed.date) {
-    const diff = dayNumber(today) - dayNumber(parsed.date);
-    if (diff < -1) { dateOk = false; dateDetail = 'The date on it is in the future.'; }
-    else if (diff > MAX_PAYMENT_AGE_DAYS) { dateOk = false; dateDetail = `It shows a payment from ${parsed.date}, which is too long ago.`; }
+    const dayDiff = dayNumber(today) - dayNumber(parsed.date);
+    if (parsed.pay_time && Number.isFinite(ctx.nowMin)) {
+      const [h, mi] = parsed.pay_time.split(':').map(Number);
+      const age = dayDiff * 1440 + (ctx.nowMin - (h * 60 + mi));
+      if (age < -FUTURE_SLACK_MIN) { dateOk = false; dateDetail = 'The date and time on it are in the future.'; }
+      else if (age > MAX_AGE_MIN) { dateOk = false; dateDetail = `It shows a payment made ${agoText(age)} ago. The payment must be from the last hour.`; }
+    } else if (dayDiff !== 0) {   // no time to go by, so at least it has to be today
+      dateOk = false;
+      dateDetail = dayDiff < 0 ? 'The date on it is in the future.' : `It shows a payment from ${parsed.date}. The payment must be from the last hour.`;
+    }
   }
-  add('date', 'The payment is recent', dateOk, dateDetail);
+  add('date', 'The payment was made in the last hour', dateOk, dateDetail);
+  const agrees = !parsed.tid_date || !(parsed.text_dates || []).length
+    || parsed.text_dates.some((d) => Math.abs(dayNumber(d) - dayNumber(parsed.tid_date)) <= 1);
+  add('tid_date', 'The date matches the date in the transaction ID', agrees, "The date shown doesn't match the date inside the transaction ID.");
   add('date_found', 'The date is visible', !!parsed.date, 'We could not read the date on it.', false);
 
   // Not even a picture: that is the only thing worth saying.
@@ -490,10 +532,12 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
 }
 
 /** What gets saved with the booking, for the owner to see next to the screenshot. */
-export function buildProof({ file, ocr, parsed, judged, path }) {
+export function buildProof({ file, ocr, parsed, judged, path, signedName = '', nameSeen = false }) {
   return {
     v: 1,
     verdict: judged.verdict,
+    signed_name: String(signedName || '').trim().replace(/\s+/g, ' ').toUpperCase(),   // the name the client signed with
+    name_seen: !!nameSeen,                                                              // ... and whether it is in the screenshot
     path,
     sha256: file.sha256,
     file: {
@@ -502,7 +546,7 @@ export function buildProof({ file, ocr, parsed, judged, path }) {
     },
     extracted: {
       recipient_ok: parsed.recipient.name_ok, account_ok: parsed.recipient.account_ok, recipient_line: parsed.recipient.line,
-      amount: parsed.amount ? parsed.amount.value : null, txn_id: parsed.txn_id, date: parsed.date, time: parsed.time,
+      amount: parsed.amount ? parsed.amount.value : null, txn_id: parsed.txn_id, date: parsed.date, time: parsed.time, pay_time: parsed.pay_time,
       network: parsed.network, phones: parsed.phones, status_good: parsed.status_good, status_bad: parsed.status_bad,
     },
     checks: judged.checks.map((c) => ({ id: c.id, ok: c.ok, hard: c.hard })),
@@ -519,4 +563,18 @@ export function accountNumbers(instructions) {
     if (d.length >= 6 && d.length <= 15 && !out.includes(d)) out.push(d);
   }
   return out;
+}
+
+/** The name as the client signs it: first and last name, letters only. */
+export function validSignedName(name) {
+  const n = String(name || '').trim().replace(/\s+/g, ' ');
+  return n.length >= 5 && n.length <= 60 && /^[A-Za-z][A-Za-z.'-]*( [A-Za-z][A-Za-z.'-]*)+$/.test(n);
+}
+
+/** Is every part of that name somewhere in the screenshot's text (allowing for a letter misread)? */
+export function nameInText(name, text) {
+  const tokens = String(name || '').toUpperCase().split(/[^A-Z]+/).filter((t) => t.length >= 3);
+  if (!tokens.length) return false;
+  const words = String(text || '').toUpperCase().split(/[^A-Z]+/).filter((w) => w.length >= 3);
+  return tokens.every((tok) => words.some((w) => editDistance(w, tok) <= (tok.length >= 5 ? 1 : 0)));
 }
