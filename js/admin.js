@@ -709,9 +709,11 @@ async function onPaymentAction(e) {
 // ---------------------------------------------------------------- payment screenshots (2.12.0)
 const CHECK_LABEL = {
   type: 'A picture file', size: 'Normal file size', pixels: 'Phone-screenshot size', edited: 'Not made or changed in an editing app',
-  camera: 'A screenshot, not a camera photo', fresh: 'File saved recently', readable: 'Writing clear enough to read',
+  camera: 'A screenshot, not a camera photo', fresh: 'File saved in the last hour', meta_time: 'Date inside the picture is recent',
+  readable: 'Writing clear enough to read',
   recipient: 'Paid to the right person', amount: 'Amount covers the price', txn: 'Has a transaction ID', status: 'Does not say failed',
-  status_good: 'Says successful', date: 'Payment is recent', date_found: 'Date visible',
+  status_good: 'Says successful', date: 'Payment is recent', tid_date: 'Date matches the transaction ID',
+  times_agree: 'Time matches the transaction ID', one_payment: 'Only one payment shown', unused: 'Not used before',
 };
 
 function closeProof() { $('#modal-root').innerHTML = ''; }

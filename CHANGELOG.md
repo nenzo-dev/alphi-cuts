@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.13.0 (2026-10-11)
+
+Run `supabase/migrations/20_strict_screenshot_checks.sql` once in the Supabase SQL editor, after 19.
+
+- **Checked against a real client message** (Airtel's "You have withdrawn ZMW 50.00 from 20194278 ALFRED
+  PHIRI. Bal is ZMW 124.25. TID: CO260928.1202.I86552."). The reader now: finds the amount when a large font
+  puts "ZMW" and the number on different lines (and still skips the balance), accepts "withdrawn ... from
+  ALFRED PHIRI" as the agent being paid (a name after "received from" is still the sender), counts
+  "withdrawn" as a success message, and reads the big letter I in a transaction ID the same way however it
+  looks in the picture (I, l, 1 or |), so the same payment always gives the same ID. The real picture was
+  read and approved through the real reader (with the clock set to just after it was paid), and the same
+  message is turned down when it is over an hour old or has the wrong amount or name.
+- **Very strict.** Any one of these failing turns the screenshot down as "Fake proof of payment":
+  - the owner's name has to be on it, **and** the account from the payment details (the agent code) when
+    the payment details have one (before, either was enough);
+  - the payment time (inside the transaction ID, or beside the date) and the time the file was saved must
+    be from the last hour, and a missing one is turned down (clocks may differ by 5 minutes, not 10); so is
+    a screenshot with no date or no time on it;
+  - any date or time saved inside the picture (its EXIF details) must be from the last hour too;
+  - the date written on it must be the same day as the date in the transaction ID (no day of slack), and a
+    time written beside a date must be within 10 minutes of the time in the ID;
+  - only one payment may show: two different transaction IDs in one picture are turned down (the Airtel app's
+    Transaction Details screen shows the same ID twice, in the message and in its own row, and the two readings
+    can differ by a letter, a digit or a stray character, so IDs from the same day within two minutes of each
+    other, or that end alike, count as one payment);
+  - it must say the payment went through ("successful", "sent", "withdrawn" ...) and must not say anything
+    that sounds unfinished or refused ("enter your PIN", "please confirm", "do you want", "are you sure",
+    "in progress", "awaiting", "denied", "blocked", "timed out", as well as "failed", "pending" ...);
+  - the writing has to be read with at least 65% confidence (it was 45%).
+  The database repeats the main ones (migration 20): file time, payment time, the owner's name and the
+  account must all be there and right, and a missing value is refused. There is no check on the file's name:
+  phones name screenshots differently, and the name is easy to change.
+- **The Airtel app's "Transaction Details" screen works as well as the SMS** (a real client has already booked
+  with one on 2.12.3). It was checked again against the strict rules with mock copies at six phone sizes
+  (540 to 1080 pixels wide): all accepted, with the reading 91-94% sure; the same screen with no agent code,
+  K20, or a payment 95 minutes old is turned down. Transaction IDs are now read the same way each time
+  (a digit where a letter belongs is a letter read wrongly, a stray character in front or a dot inside is
+  dropped), so the same payment gives the same ID from an SMS and from the app.
+- **Nothing the reader found is shown to the client any more:** no "Paid to / Amount / Transaction ID"
+  box after a screenshot is accepted, no "we can see your name in the screenshot" note, and the ticket no
+  longer repeats the transaction ID. An accepted screenshot says so and tells the client to call Mr Alfred;
+  a turned-down one says "Fake proof of payment". Mr Alfred still sees everything, with the reasons for a
+  turned-down screenshot in Payments > Turned-down screenshots.
+- While the screenshot is being read the page says "Please wait, this may take a while."
+
 ## 2.12.3 (2026-10-11)
 
 No database change.

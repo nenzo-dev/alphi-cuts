@@ -1,4 +1,4 @@
--- AlPhi Cuts database schema (v2.12.2).
+-- AlPhi Cuts database schema (v2.13.0).
 --
 -- Row-level security is the real access control. Anything the public can do goes through a
 -- SECURITY DEFINER function below, which checks its inputs and only touches what it should: a
@@ -359,6 +359,9 @@ declare
   v_path text;
   v_hash text;
   v_start int;
+  v_mod timestamptz;
+  v_pay_at timestamp;
+  v_acct boolean;
 begin
   select * into c from public.site_config where id = 1;
   v_pay := c.require_payment
@@ -412,12 +415,25 @@ begin
        or length(btrim(p_proof->>'signed_name')) < 5 or length(btrim(p_proof->>'signed_name')) > 60 then
       raise exception 'Please sign with your name exactly as it shows when money is received (first and last name).';
     end if;
-    -- The screenshot, and the payment on it, can't be more than an hour old (the page checks this too).
-    if p_proof->'file'->>'modified' ~ '^\d{4}-\d{2}-\d{2}T' and now() - (p_proof->'file'->>'modified')::timestamptz > interval '65 minutes' then
-      raise exception 'That payment screenshot was not accepted. If you really paid, please call the shop to confirm.';
-    end if;
-    if p_proof->'extracted'->>'date' ~ '^\d{4}-\d{2}-\d{2}$' and p_proof->'extracted'->>'pay_time' ~ '^\d{2}:\d{2}$'
-       and public.shop_now() - ((p_proof->'extracted'->>'date')::date + (p_proof->'extracted'->>'pay_time')::time) > interval '70 minutes' then
+    -- Strict, like the page (a little looser for clocks that differ): when the file was saved and when the payment
+    -- was made must both be from the last hour, and the payment must have been made to the owner: his name has
+    -- to be on the screenshot, and so does the account from his payment details when there is one.
+    -- A missing or unreadable value is a no.
+    begin
+      v_mod := (p_proof->'file'->>'modified')::timestamptz;
+      v_pay_at := (p_proof->'extracted'->>'date')::date + (p_proof->'extracted'->>'pay_time')::time;
+    exception when others then
+      v_mod := null;
+      v_pay_at := null;
+    end;
+    v_acct := exists (
+      select 1 from regexp_matches(coalesce((select instructions from public.payment_config where id = 1), ''), '[0-9][0-9 ]{4,}[0-9]', 'g') m
+      where length(regexp_replace(m[1], '\D', '', 'g')) between 6 and 15);
+    if v_mod is null or v_pay_at is null
+       or now() - v_mod > interval '65 minutes' or v_mod - now() > interval '10 minutes'
+       or public.shop_now() - v_pay_at > interval '65 minutes' or v_pay_at - public.shop_now() > interval '10 minutes'
+       or (p_proof->'extracted'->>'recipient_ok') is distinct from 'true'
+       or (v_acct and (p_proof->'extracted'->>'account_ok') is distinct from 'true') then
       raise exception 'That payment screenshot was not accepted. If you really paid, please call the shop to confirm.';
     end if;
     v_path := p_proof->>'path';

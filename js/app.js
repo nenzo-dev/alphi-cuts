@@ -435,23 +435,18 @@ function updatePayLock() {
   onSignNote();
 }
 
-// Says whether the name signed can be seen in the screenshot (it often can't: that is normal).
+// Only says when the name isn't typed in full. Nothing about what was read from the screenshot.
 function onSignNote() {
   const note = $('#bk-sign-note');
   const typed = signedName();
-  if (!proofOk() || !typed) { note.textContent = ''; return; }
-  if (!nameOk()) { note.textContent = t('pay_name_bad'); note.className = 'small bad-text'; return; }
-  const seen = nameInText(typed, proof.ocr.text);
-  note.textContent = t(seen ? 'pay_name_seen' : 'pay_name_unseen');
-  note.className = 'small muted';
+  if (!proofOk() || !typed || nameOk()) { note.textContent = ''; return; }
+  note.textContent = t('pay_name_bad');
+  note.className = 'small bad-text';
 }
 
 // ---- the screenshot: read, checked, shown to the client before they book
 let proof = null; // null, or { status: 'busy' | 'approved' | 'rejected' | 'error', ... }
 let proofRun = 0;
-
-const fmtBytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-const fmtWhen = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { timeZone: CONFIG.timeZone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not shown');
 
 function callTel() {
   const tel = String((cfg && cfg.phone) || '').replace(/[^\d+]/g, '');
@@ -471,32 +466,19 @@ function callHtml() {
     : `<p>${text}</p>`;
 }
 
-// Only what the client needs to see that we read the right payment. Nothing about what is checked.
-function factsHtml(p) {
-  const { parsed } = p;
-  const row = (k, v) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`;
-  const to = parsed.recipient.name_ok ? cfg.owner_name : (parsed.recipient.account_ok ? `Account ${parsed.recipient.account}` : '');
-  return `
-    <table class="proof-facts">
-      ${row('Paid to', to)}
-      ${row('Amount', parsed.amount ? `K${Number(parsed.amount.value).toFixed(Number.isInteger(parsed.amount.value) ? 0 : 2)}` : '')}
-      ${row('Transaction ID', parsed.txn_id || '')}
-    </table>`;
-}
-
 function renderProof() {
   const box = $('#bk-proof-status');
   if (!proof || !payRequired()) { box.hidden = true; box.innerHTML = ''; box.className = 'proof-status'; return; }
   box.hidden = false;
   if (proof.status === 'busy') {
     box.className = 'proof-status busy';
-    box.innerHTML = `<div>${esc(proof.label || 'Reading your screenshot')}&hellip;</div><div class="proof-bar"><i style="width:${Math.round((proof.pct || 0) * 100)}%"></i></div><p class="small muted">This runs on your phone and can take up to a minute.</p>`;
+    box.innerHTML = `<div>${esc(proof.label || 'Reading your screenshot')}&hellip;</div><div class="proof-bar"><i style="width:${Math.round((proof.pct || 0) * 100)}%"></i></div><p class="small muted">Please wait, this may take a while.</p>`;
   } else if (proof.status === 'error') {
     box.className = 'proof-status bad';
     box.innerHTML = `<h4>${esc(t('pay_proof_bad'))}</h4><p>We couldn't read it just now. Please try again, or use a clearer screenshot.</p>${callHtml()}`;
   } else if (proof.status === 'approved') {
     box.className = 'proof-status ok';
-    box.innerHTML = `<h4>${esc(t('pay_proof_ok'))}</h4>${factsHtml(proof)}
+    box.innerHTML = `<h4>${esc(t('pay_proof_ok'))}</h4>
       <p><b>${esc(t('pay_proof_show'))}</b></p>${callBtnHtml()}`;
   } else {
     box.className = 'proof-status bad';
@@ -526,7 +508,7 @@ async function onProofPicked() {
     if (run !== proofRun) return;
     const ctx = { ownerName: cfg.owner_name, accountNumbers: accountNumbers(payInfo.instructions), today: todayISO() };
     const parsed = parseProofText(ocr.text, ctx);
-    const judged = judgeProof({ file: info, ocr, parsed }, { price: payInfo.amount_kwacha, ownerName: cfg.owner_name, today: todayISO(), nowMin: nowMinutesInShopTz() });
+    const judged = judgeProof({ file: info, ocr, parsed }, { price: payInfo.amount_kwacha, ownerName: cfg.owner_name, today: todayISO(), nowMin: nowMinutesInShopTz(), requireAccount: ctx.accountNumbers.length > 0 });
     if (judged.verdict === 'approved') {
       // Used already (by anyone, even in a booking since cancelled)? Better to say so now than after they have filled in the form.
       let used = false;
@@ -828,7 +810,7 @@ function paymentHtml(b) {
       return closed || b.status === 'done' || startsIn(b) <= 0 || payRequired() ? '' : `<button type="button" class="link-btn" data-act="pay" data-token="${token}">Pay online instead</button>`;
     case 'submitted':
       if (closed) return `<p class="small pay-expired">${esc(t(b.payment_expired_at ? 'pay_unconfirmed' : 'pay_cancelled', { time: fmtTime(b.slot_time) }))}</p>${callBtnHtml()}`;
-      return `<p class="small muted">${esc(t('pay_confirming', { ref: b.payment_ref || '', name: (b.payment_proof && b.payment_proof.signed_name) || '', time: fmtTime(b.slot_time) }))}</p>${callBtnHtml()}`;
+      return `<p class="small muted">${esc(t('pay_confirming', { name: (b.payment_proof && b.payment_proof.signed_name) || '', time: fmtTime(b.slot_time) }))}</p>${callBtnHtml()}`;
     case 'rejected':
       return `<p class="small pay-expired">${esc(t('pay_not_found', { time: fmtTime(b.slot_time) }))}</p>`;
     case 'requested':

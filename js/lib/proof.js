@@ -13,8 +13,9 @@ const OCR_BASE = new URL('../../vendor/tesseract/', import.meta.url).href;
 
 export const MAX_BYTES = 8 * 1024 * 1024;
 const MIN_BYTES = 20 * 1024;
+const MIN_CONFIDENCE = 65;       // how sure the reader has to be of the writing
 const MAX_AGE_MIN = 60;            // the screenshot, and the payment on it, are at most an hour old
-const FUTURE_SLACK_MIN = 10;       // phone clocks differ a little
+const FUTURE_SLACK_MIN = 5;        // phone clocks differ a little
 
 // Editing apps. A payment screenshot is made by the phone itself, not by one of these.
 const EDITORS = /photoshop|adobe|canva|picsart|snapseed|pixlr|gimp|lightroom|figma|paint\.net|fotor|photoroom|meitu|beautyplus|facetune|inshot|picmonkey|affinity|sketch|krita|capcut|remini|ibis ?paint|polarr|vsco|photopea|lunapic/i;
@@ -329,6 +330,29 @@ function findDates(text, today) {
   return found;
 }
 
+/**
+ * An Airtel transaction ID has a fixed shape (CO261011.1642.I86552: two letters, a date, a time, a letter and
+ * five digits), and the big letter I looks like a small l and a 1 on a phone. Read the letters and the digits by
+ * where they sit, so the same payment always gives the same ID, however the picture was read.
+ */
+function canonTid(raw) {
+  const trimmed = String(raw).replace(/[.\-_]+$/g, '');
+  // A stray dot inside the last part (L.46151 for L46151) is dropped.
+  const parts = trimmed.split('.');
+  const s = parts.length > 3 ? `${parts[0]}.${parts[1]}.${parts.slice(2).join('')}` : trimmed;
+  const m = /^([A-Za-z0-9]{2,4})([0-9OoIl|]{6})\.([0-9OoIl|]{4})\.([A-Za-z0-9|])([0-9OoIl|]{5})$/.exec(s);
+  if (!m) return s.toUpperCase();
+  const digits = (x) => x.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1');
+  // Where a letter belongs, a digit is a letter read wrongly: 0 O, 1 I, 5 S, 8 B, 2 Z, 6 G (and l, | are the capital I).
+  const letter = (x) => x.replace(/0/g, 'O').replace(/[1l|]/g, 'I').replace(/5/g, 'S').replace(/8/g, 'B').replace(/2/g, 'Z').replace(/6/g, 'G').toUpperCase();
+  // The two letters in front: if the picture gave extra ones, keep the pair that is a kind of transaction
+  // Airtel uses (CO cash out, MP merchant payment, PP person to person), else the first two.
+  const front = letter(m[1]);
+  const pairs = [...Array(front.length - 1).keys()].map((i) => front.slice(i, i + 2));
+  const prefix = pairs.find((x) => /^(CO|MP|PP)$/.test(x)) || front.slice(0, 2);
+  return `${prefix}${digits(m[2])}.${digits(m[3])}.${letter(m[4])}${digits(m[5])}`;
+}
+
 function addDays(iso, delta) {
   return new Date((dayNumber(iso) + delta) * 86400000).toISOString().slice(0, 10);
 }
@@ -352,11 +376,16 @@ export function parseProofText(raw, ctx = {}) {
   let nameOk = tokens.length > 0 && where.every((i) => i >= 0) && Math.max(...where) - Math.min(...where) <= 2;
   let nameLine = nameOk ? lines[where[0]] : '';
   if (nameOk) {
-    // "From ALFRED PHIRI" is the sender, not the person paid.
-    const ctxLine = `${lines[Math.max(0, Math.min(...where) - 1)] || ''} ${lines[Math.min(...where)] || ''}`.toUpperCase();
-    const nameAt = Math.max(0, ctxLine.search(new RegExp(tokens[0].slice(0, 3))));
-    const before = ctxLine.slice(0, nameAt);
-    if (/\bFROM\b/.test(before) && !/\b(TO|PAID|SENT|RECIPIENT|BENEFICIARY|PAYEE)\b/.test(before.slice(before.lastIndexOf('FROM')))) nameOk = false;
+    // "From ALFRED PHIRI" is the sender, not the person paid. (But "You have withdrawn ZMW 50 from 2019
+    // ALFRED PHIRI" is the client's own cash-out message: the agent they paid is after "from".)
+    const first = Math.min(...where);
+    const nameRe = new RegExp(tokens[0].slice(0, 3));
+    const ctxLine = `${lines[Math.max(0, first - 1)] || ''} ${lines[first] || ''}`.toUpperCase();
+    const before = ctxLine.slice(0, Math.max(0, ctxLine.search(nameRe)));
+    const here = (lines[first] || '').toUpperCase();
+    const wide = `${lines.slice(Math.max(0, first - 3), first).join(' ')} ${here.slice(0, Math.max(0, here.search(nameRe)))}`.toUpperCase();
+    const cashOut = /\b(WITHDRAWN|WITHDREW|WITHDRAW|WITHDRAWAL|CASH ?OUT)\b/.test(wide);
+    if (/\bFROM\b/.test(before) && !cashOut && !/\b(TO|PAID|SENT|RECIPIENT|BENEFICIARY|PAYEE)\b/.test(before.slice(before.lastIndexOf('FROM')))) nameOk = false;
   }
   const digits = flat.replace(/[^0-9]/g, '');
   let accountOk = false;
@@ -368,32 +397,31 @@ export function parseProofText(raw, ctx = {}) {
 
   // ---- how much
   const amounts = [];
+  // The text as one line: a large font wraps "ZMW" and the number onto different lines.
+  const oneLine = lines.join(' ');
   const money = /(?:ZMW|ZMK|KWACHA|\bK)\s?([0-9][0-9Oo,.]{0,12})|([0-9][0-9,]*\.\d{2})\s?(?:ZMW|ZMK)/gi;
-  lines.forEach((line, idx) => {
-    let m;
-    money.lastIndex = 0;
-    while ((m = money.exec(line))) {
-      const before = line.slice(Math.max(0, m.index - 22), m.index).toLowerCase();
-      if (/(fee|fees|charge|charges|balance|bal|tax|commission|comm|available|limit|cashback|bonus)[^0-9]{0,14}$/.test(before)) continue;
-      const value = numberFrom((m[1] || m[2]).trim());
-      if (!Number.isFinite(value) || value <= 0 || value > 1000000) continue;
-      const near = `${lines[idx - 1] || ''} ${line}`.toLowerCase();
-      amounts.push({ value, line, strong: /(sent|paid|payment|pay |amount|transfer|debited|cash ?out|purchase|completed|successful)/.test(near) });
-    }
-  });
+  let mo;
+  while ((mo = money.exec(oneLine))) {
+    const before = oneLine.slice(Math.max(0, mo.index - 22), mo.index).toLowerCase();
+    if (/(fee|fees|charge|charges|balance|bal|tax|commission|comm|available|limit|cashback|bonus)[^0-9]{0,14}$/.test(before)) continue;
+    const value = numberFrom((mo[1] || mo[2]).trim());
+    if (!Number.isFinite(value) || value <= 0 || value > 1000000) continue;
+    const near = oneLine.slice(Math.max(0, mo.index - 60), mo.index + 60);
+    amounts.push({ value, line: near, strong: /(sent|paid|payment|pay |amount|transfer|debited|cash ?out|withdrawn|withdrew|purchase|completed|successful)/.test(near.toLowerCase()) });
+  }
   const amount = amounts.find((a) => a.strong) || amounts[0] || null;
 
   // ---- transaction ID
   let txnId = '';
-  const label = /(?:financial\s+transaction\s+id|trans(?:action)?\.?\s*(?:id|ref(?:erence)?|no\.?|number)|trx\.?\s*(?:id|ref|no\.?)?|txn\.?\s*(?:id|ref|no\.?)?|\btid\b|reference(?:\s*(?:no\.?|number|id))?|\bref\.?(?:\s*(?:no\.?|id))?|confirmation\s*(?:code|no\.?|number)?)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9._\-]{5,34})/gi;
+  const label = /(?:financial\s+transaction\s+id|trans(?:action)?\.?\s*(?:id|ref(?:erence)?|no\.?|number)|trx\.?\s*(?:id|ref|no\.?)?|txn\.?\s*(?:id|ref|no\.?)?|\btid\b|reference(?:\s*(?:no\.?|number|id))?|\bref\.?(?:\s*(?:no\.?|id))?|confirmation\s*(?:code|no\.?|number)?)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9._\-|]{5,34})/gi;
   let m;
   while ((m = label.exec(flat))) {
     const cand = m[1].replace(/[.\-_]+$/g, '');
-    if ((cand.match(/\d/g) || []).length >= 4 && !/^20\d{2}[-/.]\d/.test(cand)) { txnId = cand.toUpperCase(); break; }
+    if ((cand.match(/\d/g) || []).length >= 4 && !/^20\d{2}[-/.]\d/.test(cand)) { txnId = canonTid(cand); break; }
   }
   if (!txnId) {
-    const airtel = /\b([A-Z]{2}\d{6}\.\d{4}\.[A-Z0-9]{4,8})\b/i.exec(flat);
-    if (airtel) txnId = airtel[1].toUpperCase();
+    const airtel = /\b([A-Z0-9]{2}[0-9OIl]{6}\.[0-9OIl]{4}\.[A-Z0-9][0-9OIl]{4,7})\b/i.exec(flat);
+    if (airtel) txnId = canonTid(airtel[1]);
   }
   // An Airtel transaction ID carries its own date and time: CO261011.1254.A33706 is 11 Oct 2026, 12:54.
   let tidDate = '';
@@ -402,6 +430,24 @@ export function parseProofText(raw, ctx = {}) {
   if (tm && validDay(2000 + +tm[1], +tm[2], +tm[3]) && +tm[4] < 24 && +tm[5] < 60) {
     tidDate = isoOf(2000 + +tm[1], +tm[2], +tm[3]);
     tidTime = `${tm[4]}:${tm[5]}`;
+  }
+
+  // Every transaction ID in the picture. More than one payment showing is turned down. But the Airtel app's
+  // Transaction Details screen shows the same ID twice (in the message and in its own row), and a letter or a
+  // digit can be read differently each time, so IDs from the same day that are within two minutes of each
+  // other, or that end alike, are one payment.
+  const tids = new Set(txnId ? [txnId] : []);
+  const airtelAll = /\b([A-Z0-9]{2,4}[0-9OIl]{6}\.[0-9OIl]{4}\.[A-Z0-9][0-9OIl]{4,7})\b/gi;
+  let am;
+  while ((am = airtelAll.exec(flat))) tids.add(canonTid(am[1]));
+  const payments = [];
+  for (const id of tids) {
+    const mt = /^[A-Z]{2}(\d{6})\.(\d{2})(\d{2})\./.exec(id);
+    const at = mt ? Number(mt[2]) * 60 + Number(mt[3]) : -1;
+    const suffix = id.split('.').pop();
+    if (!payments.some((p) => p.id === id || editDistance(p.id, id) <= 2 || (mt && p.day === mt[1] && (Math.abs(p.at - at) <= 2 || editDistance(p.suffix, suffix) <= 2)))) {
+      payments.push({ id, day: mt ? mt[1] : '', at, suffix });
+    }
   }
 
   // ---- when
@@ -415,17 +461,16 @@ export function parseProofText(raw, ctx = {}) {
   // The time of the payment itself: inside the ID, else on the same line as a date. (The first clock on a
   // screenshot is the phone's status bar: when the screenshot was taken, not when it was paid.)
   const hm24 = (mt) => `${pad(mt[3] ? (+mt[1] % 12) + (/p/i.test(mt[3]) ? 12 : 0) : +mt[1])}:${mt[2]}`;
-  let payTime = tidTime;
-  if (!payTime) {
-    for (const line of lines) {
-      const lt = /\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\s*([ap]m)?/i.exec(line);
-      if (lt && (findDates(line, today).length > 0 || /\b(today|yesterday)\b/i.test(line))) { payTime = hm24(lt); break; }
-    }
+  let writtenTime = '';   // the time written beside a date (a message's own time stamp)
+  for (const line of lines) {
+    const lt = /\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\s*([ap]m)?/i.exec(line);
+    if (lt && (findDates(line, today).length > 0 || /\b(today|yesterday)\b/i.test(line))) { writtenTime = hm24(lt); break; }
   }
+  const payTime = tidTime || writtenTime;
 
   // ---- status, network, numbers
-  const bad = [...new Set((flat.match(/\b(fail(?:ed|ure)?|declined|rejected|insufficient|cancel(?:led)?|reversed|pending|unsuccessful|error|expired|not\s+(?:sent|completed|successful)|invalid)\b/gi) || []).map((w) => w.toLowerCase()))];
-  const good = [...new Set((flat.match(/\b(success(?:ful(?:ly)?)?|completed|confirmed|sent|paid|received|approved|done)\b/gi) || []).map((w) => w.toLowerCase()))];
+  const bad = [...new Set((flat.match(/\b(fail(?:ed|ure)?|declined|rejected|insufficient|cancel(?:led)?|reversed|pending|unsuccessful|error|expired|denied|blocked|unable|timed?\s*out|in\s+progress|awaiting|enter\s+(?:your\s+)?pin|please\s+confirm|do\s+you\s+want|are\s+you\s+sure|not\s+(?:sent|completed|successful)|invalid)\b/gi) || []).map((w) => w.toLowerCase()))];
+  const good = [...new Set((flat.match(/\b(success(?:ful(?:ly)?)?|completed|confirmed|sent|paid|received|withdrawn|withdrew|approved|done)\b/gi) || []).map((w) => w.toLowerCase()))];
   let network = '';
   if (/\bMTN\b|MOMO/.test(upper)) network = 'MTN MoMo';
   else if (/AIRTEL/.test(upper)) network = 'Airtel Money';
@@ -447,6 +492,9 @@ export function parseProofText(raw, ctx = {}) {
     date_found: dates.length > 0 || !!date,
     time: payTime || time,
     pay_time: payTime,
+    tid_time: tidTime,
+    written_time: writtenTime,
+    tid_count: payments.length,
     network,
     status_bad: bad,
     status_good: good,
@@ -480,15 +528,33 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   const camera = !!(m.exposure || m.aperture || m.iso);
   add('camera', 'It is a screenshot, not a photo of a screen', !camera, 'This looks like a photo taken with a camera. Please send a screenshot.');
   const agoText = (min) => (min < 120 ? `${Math.round(min)} minutes` : `${Math.round(min / 60)} hours`);
-  const fileAge = file.modified && Date.parse(file.modified) > 86400000 ? (now.getTime() - Date.parse(file.modified)) / 60000 : 0;
-  add('fresh', 'The screenshot was taken in the last hour', !(file.modified && fileAge > MAX_AGE_MIN),
-    `This screenshot was saved ${agoText(fileAge)} ago. It must be from the last hour, so please send a screenshot of a new payment.`);
-  const readable = (ocr.words || 0) >= 12 && (ocr.confidence || 0) >= 45;
+  // Minutes since a date and time on the shop's clock (negative when it is in the future).
+  const nowMin = Number.isFinite(ctx.nowMin) ? ctx.nowMin : now.getUTCHours() * 60 + now.getUTCMinutes();
+  const minutesAgo = (iso, hhmm) => {
+    const [h, mi] = hhmm.split(':').map(Number);
+    return (dayNumber(today) - dayNumber(iso)) * 1440 + (nowMin - (h * 60 + mi));
+  };
+  const recent = (min) => min >= -FUTURE_SLACK_MIN && min <= MAX_AGE_MIN;
+  const tooOld = (min) => (min < 0 ? 'is in the future' : `is ${agoText(min)} old`);
+  // Everything about the file has to be from the last hour: when it was saved, and the date in its name.
+  const fileAge = file.modified && Date.parse(file.modified) > 86400000 ? (now.getTime() - Date.parse(file.modified)) / 60000 : null;
+  add('fresh', 'The screenshot was saved in the last hour', fileAge !== null && recent(fileAge),
+    fileAge === null ? 'The file does not say when it was saved.' : `The file ${fileAge < 0 ? 'was saved in the future' : `was saved ${agoText(fileAge)} ago`}.`);
+  // Everything inside the picture about when it was made has to be recent too.
+  const metaStamp = (v) => {
+    const x = /^(20\d{2})[:/-](\d{2})[:/-](\d{2})[ T](\d{2}):(\d{2})/.exec(String(v || '').trim());
+    return x && validDay(+x[1], +x[2], +x[3]) && +x[4] < 24 && +x[5] < 60 ? [isoOf(+x[1], +x[2], +x[3]), `${x[4]}:${x[5]}`] : null;
+  };
+  const metaOld = [m.taken, m.dateTime].map(metaStamp).filter(Boolean).map(([d, t]) => minutesAgo(d, t)).find((a) => !recent(a));
+  add('meta_time', 'The date saved inside the picture is from the last hour', metaOld === undefined,
+    metaOld === undefined ? '' : `The date saved inside the picture ${tooOld(metaOld)}.`);
+  const readable = (ocr.words || 0) >= 12 && (ocr.confidence || 0) >= MIN_CONFIDENCE;
   add('readable', 'The writing is clear enough to read', readable, 'We could not read the writing clearly. Please send a full, sharp screenshot of the payment message.');
 
   const r = parsed.recipient;
-  add('recipient', `The payment went to ${owner}`, r.name_ok || r.account_ok,
-    `We could not see "${owner}" as the person paid.`);
+  // The owner's name has to be there, and the account (agent code) from his payment details too, when there is one.
+  add('recipient', `The payment went to ${owner}`, r.name_ok && (!ctx.requireAccount || r.account_ok),
+    r.name_ok ? 'We could not see the payment account (the agent code or number) from the payment details.' : `We could not see "${owner}" as the person paid.`);
 
   const amt = parsed.amount;
   add('amount', `The amount is ${fmtK(price)} or more`, !!amt && amt.value + 0.001 >= price,
@@ -497,27 +563,30 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   add('txn', 'There is a transaction ID', !!parsed.txn_id, 'We could not find a transaction ID in the screenshot.');
   add('status', 'It does not say the payment failed', parsed.status_bad.length === 0,
     `It mentions "${parsed.status_bad[0] || ''}", so the payment may not have gone through.`);
-  add('status_good', 'It says the payment was successful', parsed.status_good.length > 0, 'We could not see a "successful" or "sent" message.', false);
+  add('status_good', 'It says the payment was successful', parsed.status_good.length > 0, 'We could not see a "successful", "sent" or "withdrawn" message.');
 
-  let dateOk = true;
-  let dateDetail = '';
-  if (parsed.date) {
-    const dayDiff = dayNumber(today) - dayNumber(parsed.date);
-    if (parsed.pay_time && Number.isFinite(ctx.nowMin)) {
-      const [h, mi] = parsed.pay_time.split(':').map(Number);
-      const age = dayDiff * 1440 + (ctx.nowMin - (h * 60 + mi));
-      if (age < -FUTURE_SLACK_MIN) { dateOk = false; dateDetail = 'The date and time on it are in the future.'; }
-      else if (age > MAX_AGE_MIN) { dateOk = false; dateDetail = `It shows a payment made ${agoText(age)} ago. The payment must be from the last hour.`; }
-    } else if (dayDiff !== 0) {   // no time to go by, so at least it has to be today
-      dateOk = false;
-      dateDetail = dayDiff < 0 ? 'The date on it is in the future.' : `It shows a payment from ${parsed.date}. The payment must be from the last hour.`;
-    }
+  // When it was paid: the date and time (the time inside an Airtel transaction ID, or the one beside the date).
+  // No date or no time means no way to know how old the payment is, so it is turned down.
+  let dateOk = false;
+  let dateDetail = 'We could not read when the payment was made.';
+  if (parsed.date && parsed.pay_time) {
+    const age = minutesAgo(parsed.date, parsed.pay_time);
+    dateOk = recent(age);
+    dateDetail = `The payment ${tooOld(age)}.`;
+  } else if (parsed.date) {
+    dateDetail = 'It shows a date but no time, so there is no way to tell how old the payment is.';
   }
   add('date', 'The payment was made in the last hour', dateOk, dateDetail);
-  const agrees = !parsed.tid_date || !(parsed.text_dates || []).length
-    || parsed.text_dates.some((d) => Math.abs(dayNumber(d) - dayNumber(parsed.tid_date)) <= 1);
+  const agrees = !parsed.tid_date || !(parsed.text_dates || []).length || parsed.text_dates.some((d) => d === parsed.tid_date);
   add('tid_date', 'The date matches the date in the transaction ID', agrees, "The date shown doesn't match the date inside the transaction ID.");
-  add('date_found', 'The date is visible', !!parsed.date, 'We could not read the date on it.', false);
+  let timesOk = true;
+  if (parsed.tid_time && parsed.written_time) {
+    const [a, b] = [parsed.tid_time, parsed.written_time].map((x) => { const [h, mi] = x.split(':').map(Number); return h * 60 + mi; });
+    const gap = Math.abs(a - b);
+    timesOk = Math.min(gap, 1440 - gap) <= 10;   // a message can arrive a little after the payment
+  }
+  add('times_agree', 'The time shown matches the time in the transaction ID', timesOk, "The time shown doesn't match the time inside the transaction ID.");
+  add('one_payment', 'The picture shows one payment', (parsed.tid_count || 0) <= 1, 'The picture shows more than one transaction.');
 
   // Not even a picture: that is the only thing worth saying.
   const failed = file.kind === '' ? checks.filter((c) => c.id === 'type') : checks.filter((c) => c.hard && !c.ok);
