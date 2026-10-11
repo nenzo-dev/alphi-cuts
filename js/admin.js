@@ -385,7 +385,7 @@ async function refreshBadges() {
     ]);
     const unread = (threads || []).reduce((n, t) => n + Number(t.unread_count || 0), 0);
     setBadge('#badge-chat', unread);
-    setBadge('#badge-pay', (pending || []).filter((p) => p.payment_status === 'requested').length);
+    setBadge('#badge-pay', (pending || []).filter((p) => p.payment_status === 'requested' || p.payment_status === 'submitted').length);
     noticeNewBookings(today || []);
   } catch (err) {
     if (isAuthLoss(err)) report(err);
@@ -415,7 +415,10 @@ const STATUS_LABEL = {
   booked: 'Booked', on_deck: 'On deck', called: 'Called', checked_in: 'Checked in', in_chair: 'In chair',
   done: 'Done', no_show: 'No-show', cancelled: 'Cancelled',
 };
-const PAY_LABEL = { none: '', requested: 'Wants to pay online', approved: 'Approved, awaiting payment', paid: 'Paid' };
+const PAY_LABEL = {
+  none: '', requested: 'Wants to pay online', approved: 'Approved, awaiting payment', submitted: 'Paid, to confirm',
+  paid: 'Paid', rejected: 'Payment not found',
+};
 const WAITING = ['booked', 'on_deck', 'called', 'checked_in'];
 const shopClock = new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
@@ -431,6 +434,14 @@ function startedNote(r) {
   return `<div class="small muted">started ${fmtTime(shopClock.format(new Date(r.started_at)))}</div>`;
 }
 
+// A client who paid up front and hasn't been confirmed yet.
+function payTag(r) {
+  if (r.payment_status !== 'submitted') return '';
+  return r.status === 'cancelled'
+    ? ' <span class="pay-tag" title="Cleared at the slot time: the payment was never confirmed">not confirmed</span>'
+    : ' <span class="pay-tag" title="Check the money arrived, then tap Mark paid">confirm payment</span>';
+}
+
 const phoneLink = (p) => {
   const tel = String(p || '').replace(/[^\d+]/g, '');
   return tel.length >= 9 ? `<a href="tel:${esc(tel)}">${esc(p)}</a>` : esc(p);
@@ -441,6 +452,9 @@ function bookingActions(r, { full }) {
   if (full && WAITING.includes(r.status)) out.push(`<button class="btn btn-sm btn-gold" data-act="start" data-id="${esc(r.id)}">Start cut</button>`);
   if (full && r.status === 'in_chair') out.push(`<button class="btn btn-sm btn-gold" data-act="finish" data-id="${esc(r.id)}">Done</button>`);
   if (full && ['booked', 'on_deck', 'called'].includes(r.status)) out.push(`<button class="btn btn-sm btn-ghost" data-act="noshow" data-id="${esc(r.id)}">No-show</button>`);
+  if (r.payment_status === 'submitted' && (WAITING.includes(r.status) || r.status === 'in_chair')) {
+    out.push(`<button class="btn btn-sm btn-ghost" data-act="markpaid" data-id="${esc(r.id)}" title="${esc(`Reference ${r.payment_ref || ''}`)}">Mark paid</button>`);
+  }
   if (dbV2 && WAITING.includes(r.status)) out.push(`<button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${esc(r.id)}">Cancel</button>`);
   return out.join('');
 }
@@ -458,7 +472,7 @@ async function loadQueueTab() {
   $('#queue-table').innerHTML = visible.map((r) => `
     <tr>
       <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
-      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}</td>
+      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}${payTag(r)}</td>
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
@@ -477,7 +491,7 @@ async function loadBookingsTab() {
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
-      <td data-label="Payment" class="small muted">${esc(PAY_LABEL[r.payment_status] || '')}</td>
+      <td data-label="Payment" class="small muted">${esc(PAY_LABEL[r.payment_status] || '')}${r.payment_ref ? `<div class="pay-ref">${esc(r.payment_ref)}</div>` : ''}</td>
       <td class="actions">${bookingActions(r, { full: isToday })}</td>
     </tr>`).join('') || '<tr><td colspan="7" class="muted">No bookings that day.</td></tr>';
 }
@@ -493,6 +507,7 @@ const BOOKING_ACTIONS = {
   finish: ['admin_finish_cut', null],
   noshow: ['admin_mark_no_show', 'Mark this client as a no-show? Their slot becomes free again.'],
   cancel: ['admin_cancel_booking', 'Cancel this booking? It will be deleted and the slot becomes free again.'],
+  markpaid: ['admin_mark_paid', 'Have you checked that this money is in your account?'],
 };
 
 async function onBookingAction(e) {
@@ -506,7 +521,7 @@ async function onBookingAction(e) {
     } catch (err) {
       report(err);
     }
-    await Promise.allSettled([activeTab === 'bookings' ? loadBookingsTab() : loadQueueTab()]);
+    await Promise.allSettled([activeTab === 'bookings' ? loadBookingsTab() : loadQueueTab(), refreshBadges()]);
   });
 }
 
@@ -585,19 +600,29 @@ async function sendReply(e) {
 
 // ---------------------------------------------------------------- payments
 async function loadPaymentsTab() {
-  const [details, rows] = await Promise.all([rpc('admin_get_payment_details'), rpc('admin_list_pending_payments')]);
-  $('#pc-instructions').value = details || '';
+  const [details, rows, flag] = await Promise.all([
+    rpc('admin_get_payment_details'),
+    rpc('admin_list_pending_payments'),
+    // Before the pay-first update the column isn't there, so the switch stays hidden.
+    select('site_config', 'id=eq.1&select=require_payment').catch(() => null),
+  ]);
+  const editing = document.activeElement === $('#pc-instructions');
+  if (!editing) $('#pc-instructions').value = details || '';
+  $('#pc-required-row').hidden = !(flag && flag[0] && 'require_payment' in flag[0]);
+  if (!$('#pc-required-row').hidden && !editing) $('#pc-required').checked = !!flag[0].require_payment;
   $('#payments-table').innerHTML = (rows || []).map((r) => `
     <tr>
       <td data-label="Date">${esc(r.booking_date)}</td>
       <td data-label="Time">${fmtTime(r.slot_time)}</td>
-      <td data-label="Name">${esc(r.client_name)}</td>
-      <td data-label="Status"><span class="status-pill ${r.payment_status === 'requested' ? 'status-called' : 'status-checked_in'}">${esc(PAY_LABEL[r.payment_status] || r.payment_status)}</span></td>
+      <td data-label="Name">${esc(r.client_name)}<div class="small muted">${phoneLink(r.client_phone)}</div></td>
+      <td data-label="Reference">${r.payment_ref ? `<span class="pay-ref">${esc(r.payment_ref)}</span>` : ''}</td>
+      <td data-label="Status"><span class="status-pill ${r.payment_status === 'approved' ? 'status-checked_in' : 'status-called'}">${esc(PAY_LABEL[r.payment_status] || r.payment_status)}</span></td>
       <td class="actions">
         ${r.payment_status === 'requested' ? `<button class="btn btn-sm btn-gold" data-pay="approve" data-id="${esc(r.id)}">Approve</button>` : ''}
-        ${r.payment_status === 'approved' ? `<button class="btn btn-sm btn-gold" data-pay="paid" data-id="${esc(r.id)}">Mark paid</button>` : ''}
+        ${r.payment_status === 'approved' || r.payment_status === 'submitted' ? `<button class="btn btn-sm btn-gold" data-pay="paid" data-id="${esc(r.id)}">Mark paid</button>` : ''}
+        ${r.payment_status === 'submitted' ? `<button class="btn btn-sm btn-ghost" data-pay="reject" data-id="${esc(r.id)}">Not received</button>` : ''}
       </td>
-    </tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing needs your attention.</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">Nothing needs your attention.</td></tr>';
 }
 
 async function savePaymentDetails(e) {
@@ -606,6 +631,7 @@ async function savePaymentDetails(e) {
   await withBusy($('#pc-save'), async () => {
     try {
       await rpc('admin_set_payment_details', { p_instructions: $('#pc-instructions').value.trim() });
+      if (!$('#pc-required-row').hidden) await rpc('admin_set_payment_required', { p_required: $('#pc-required').checked });
       showMsg(msg, 'Saved.', 'ok');
     } catch (err) {
       report(err, msg);
@@ -616,11 +642,14 @@ async function savePaymentDetails(e) {
 async function onPaymentAction(e) {
   const btn = e.target.closest('[data-pay]');
   if (!btn) return;
-  const paid = btn.dataset.pay === 'paid';
+  const act = btn.dataset.pay;
+  const paid = act === 'paid';
   if (paid && !window.confirm('Have you checked that this money is in your account?')) return;
+  if (act === 'reject' && !window.confirm("You couldn't find this payment? The booking will be cancelled and the slot becomes free again.")) return;
+  const fn = { paid: 'admin_mark_paid', reject: 'admin_reject_payment', approve: 'admin_approve_payment' }[act];
   await withBusy(btn, async () => {
     try {
-      await rpc(paid ? 'admin_mark_paid' : 'admin_approve_payment', { p_booking_id: btn.dataset.id });
+      await rpc(fn, { p_booking_id: btn.dataset.id });
       await loadPaymentsTab();
       refreshBadges();
     } catch (err) {

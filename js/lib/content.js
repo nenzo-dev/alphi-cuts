@@ -85,6 +85,21 @@ export const TEXT_GROUPS = [
     },
   },
   {
+    title: 'Paying before booking',
+    keys: {
+      pay_first_title: ['Heading', 'Pay first to book'],
+      pay_first_intro: ['Intro', 'Send {price} to the details below, then enter the reference from your payment message. Free times open once you have.'],
+      pay_ref_label: ['Reference field label', 'Payment reference'],
+      pay_ref_hint: ['Reference field hint', 'Transaction ID from the message'],
+      pay_locked: ['Shown until they enter a reference', 'Enter your payment reference above to see the free times.'],
+      book_done_paid: ['After booking and paying', "You're booked for {time}, {date}. {owner_first} will confirm your payment shortly. Please be on time: if you're not here when it's your turn, the slot may go to the next person."],
+      pay_confirming: ['Payment sent, not yet confirmed', 'Payment sent (reference {ref}). Waiting for {owner_first} to confirm it. If it is not confirmed by {time}, the booking is cleared.'],
+      pay_confirmed: ['Payment confirmed', 'Your payment is confirmed. See you at {time}.'],
+      pay_unconfirmed: ['Payment not confirmed in time', "Your payment for {time} wasn't confirmed before your slot, so the booking was cleared. If you did pay, message {owner_first} with your payment reference."],
+      pay_not_found: ['Payment not found', '{owner_first} could not find your payment for {time}, so the booking was cancelled. If you did pay, message {owner_first} with your payment reference.'],
+    },
+  },
+  {
     title: 'Alerts',
     keys: {
       alert_reminder: ['Heads-up before the slot', 'Your cut at {shop} starts in {mins} minutes.'],

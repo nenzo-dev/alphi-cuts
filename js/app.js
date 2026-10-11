@@ -1,5 +1,5 @@
 import { CONFIG, VERSION } from './config.js';
-import { rpc, rpcOr, rpcShared, select, uploadFile, publicFileUrl } from './lib/api.js';
+import { rpc, rpcOr, rpcShared, select, uploadFile, publicFileUrl, isMissingFunction } from './lib/api.js';
 import {
   $, $$, esc, showMsg, showError, toast, toastError, withBusy, friendlyError, installGlobalErrorHandlers, GENERIC_ERROR,
   storageGet, storageSet,
@@ -100,6 +100,7 @@ function renderConfig() {
 
   renderContact();
   buildDateOptions();
+  renderPayFirst();
   if (!c.hidden.has('get-app') && !android) buildQrCode();
   configureAlarms({
     text: (k, v) => t(k, v), onCheckIn: doCheckIn, toast,
@@ -371,6 +372,61 @@ async function submitStyleRequest(e) {
   });
 }
 
+// ---------------------------------------------------------------- paying first (get_pay_info)
+// While the owner has "pay before booking" on and has saved payment details, the form shows those
+// details to everyone, and the day and time only open once a payment reference is entered. The
+// database checks the reference again when the booking is made.
+const PAY_KEY = 'ac_pay_info';
+const PAY_REF_MIN = 5;
+let payInfo = null; // { required, instructions, amount_kwacha }, or null when the database has no pay-first yet
+
+function savedPayInfo() {
+  try {
+    const row = JSON.parse(storageGet(PAY_KEY) || 'null');
+    return row && typeof row === 'object' && !Array.isArray(row) ? row : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadPayInfo() {
+  let row;
+  try {
+    row = await rpc('get_pay_info');
+  } catch (err) {
+    if (!isMissingFunction(err)) return false; // keep what we had
+    row = null; // the database has no pay-first yet; asked again next time, so it starts once it has
+  }
+  row = Array.isArray(row) ? row[0] : row;
+  const next = row ? { required: !!row.required, instructions: row.instructions || '', amount_kwacha: Number(row.amount_kwacha) } : null;
+  const changed = JSON.stringify(next) !== JSON.stringify(payInfo);
+  payInfo = next;
+  storageSet(PAY_KEY, JSON.stringify(next));
+  return changed;
+}
+
+const payRequired = () => !!(payInfo && payInfo.required);
+const payRefValue = () => $('#bk-ref').value.trim();
+const payRefOk = () => payRefValue().length >= PAY_REF_MIN;
+
+function renderPayFirst() {
+  if (!cfg) return;
+  const on = payRequired();
+  $('#bk-pay').hidden = !on;
+  if (on) {
+    $('#bk-pay-amount').textContent = `K${Number(payInfo.amount_kwacha).toFixed(0)}`;
+    $('#bk-pay-details').textContent = payInfo.instructions;
+    $('#bk-ref').placeholder = t('pay_ref_hint');
+  }
+  updatePayLock();
+}
+
+function updatePayLock() {
+  const locked = payRequired() && !payRefOk();
+  $('#bk-slots').disabled = locked;
+  $('#bk-locked').hidden = !locked;
+}
+
 // ---------------------------------------------------------------- booking form
 function buildDateOptions() {
   const sel = $('#bk-date');
@@ -446,6 +502,11 @@ async function submitBooking(e) {
   const slot = $('#bk-slot').value;
   const name = $('#bk-name').value.trim();
   const phone = $('#bk-phone').value.trim();
+  if (payRequired() && !payRefOk()) {
+    showMsg(msg, 'Please pay first, then enter the reference from your payment message.', 'error');
+    $('#bk-ref').focus();
+    return;
+  }
   if (!date || !slot) { showMsg(msg, 'Please pick a day and a time.', 'error'); return; }
   if (!name) { showMsg(msg, 'Please enter your name.', 'error'); $('#bk-name').focus(); return; }
   const digits = phone.replace(/\D/g, '');
@@ -458,16 +519,20 @@ async function submitBooking(e) {
   await withBusy($('#bk-submit'), async () => {
     try {
       const args = { p_date: date, p_slot: slot, p_name: name, p_phone: phone, p_style: selectedStyle || null };
+      const paid = payRequired();
+      if (paid) args.p_pay_ref = payRefValue();
       // Older databases don't take p_device yet.
       const token = await rpcOr('book_slot', { ...args, p_device: deviceToken() }, () => rpc('book_slot', args), 'book_slot+device');
       addBookingToken(token);
-      showMsg(msg, t('book_done', { time: fmtTime(slot), date: fmtDate(date) }), 'ok');
+      showMsg(msg, t(paid ? 'book_done_paid' : 'book_done', { time: fmtTime(slot), date: fmtDate(date) }), 'ok');
       const st = appStatus();
       if (android && st && !st.ready) {
         try { android.requestAlerts(); } catch { /* older app */ }
       }
       $('#bk-name').value = '';
       $('#bk-phone').value = '';
+      $('#bk-ref').value = '';
+      updatePayLock();
       setStyle('');
       invalidateDays();
       await Promise.allSettled([loadQueue(), refreshSlotOptions(), refreshMyBookings()]);
@@ -476,6 +541,7 @@ async function submitBooking(e) {
       showError(msg, err);
       invalidateDays();
       refreshSlotOptions();
+      loadPayInfo().then((changed) => { if (changed) renderPayFirst(); }).catch(() => {}); // the owner may have changed it
     }
   });
   updateBookingLimit();
@@ -517,10 +583,16 @@ async function refreshMyBookings() {
     if (drop.size) setBookingTokens(bookingTokens().filter((tk) => !drop.has(tk)));
 
     const wasRequested = new Set(myRows.filter((r) => r.payment_status === 'requested').map((r) => r.client_token));
+    const wasSubmitted = new Set(myRows.filter((r) => r.payment_status === 'submitted' && WAITING.includes(r.status)).map((r) => r.client_token));
     for (const r of keep) {
-      if (!wasRequested.has(r.client_token) || r.payment_status !== 'none' || !r.payment_expired_at) continue;
-      toast(t('pay_expired'));
-      if (document.hidden && !android) notify(cfg.shop_name, t('pay_expired'), { tag: `pay-${r.client_token}` });
+      let say = '';
+      if (wasRequested.has(r.client_token) && r.payment_status === 'none' && r.payment_expired_at) say = t('pay_expired');
+      else if (wasSubmitted.has(r.client_token) && r.payment_status === 'paid') say = t('pay_confirmed', { time: fmtTime(r.slot_time) });
+      else if (wasSubmitted.has(r.client_token) && r.payment_status === 'rejected') say = t('pay_not_found', { time: fmtTime(r.slot_time) });
+      else if (wasSubmitted.has(r.client_token) && r.payment_status === 'submitted' && r.status === 'cancelled') say = t('pay_unconfirmed', { time: fmtTime(r.slot_time) });
+      if (!say) continue;
+      toast(say);
+      if (document.hidden && !android) notify(cfg.shop_name, say, { tag: `pay-${r.client_token}` });
     }
     myRows = sortBookings(keep);
     renderMyBookings();
@@ -586,7 +658,13 @@ function paymentHtml(b) {
     case 'none':
       // A request not approved by the slot time is cleared then, and can't be made after that.
       if (b.payment_expired_at && !closed && b.status !== 'done') return `<p class="small pay-expired">${esc(t('pay_expired'))}</p>`;
-      return closed || b.status === 'done' || startsIn(b) <= 0 ? '' : `<button type="button" class="link-btn" data-act="pay" data-token="${token}">Pay online instead</button>`;
+      // With pay-first on, everyone pays up front, so there is no "pay online instead".
+      return closed || b.status === 'done' || startsIn(b) <= 0 || payRequired() ? '' : `<button type="button" class="link-btn" data-act="pay" data-token="${token}">Pay online instead</button>`;
+    case 'submitted':
+      if (closed) return `<p class="small pay-expired">${esc(t('pay_unconfirmed', { time: fmtTime(b.slot_time) }))}</p>`;
+      return `<p class="small muted">${esc(t('pay_confirming', { ref: b.payment_ref || '', time: fmtTime(b.slot_time) }))}</p>`;
+    case 'rejected':
+      return `<p class="small pay-expired">${esc(t('pay_not_found', { time: fmtTime(b.slot_time) }))}</p>`;
     case 'requested':
       return `<p class="small muted">${esc(t('pay_waiting', { time: fmtTime(b.slot_time) }))}</p>`;
     case 'approved': {
@@ -896,7 +974,9 @@ async function onTicketAction(e) {
       if (b) await withBusy(btn, () => printReceipt(b));
       break;
     case 'cancel':
-      if (!window.confirm('Cancel this booking?')) return;
+      if (!window.confirm(b && ['submitted', 'paid'].includes(b.payment_status)
+        ? `Cancel this booking? Your payment is not refunded automatically. Talk to ${ownerFirst()} about it.`
+        : 'Cancel this booking?')) return;
       await withBusy(btn, async () => {
         try {
           await rpc('cancel_my_booking', { p_token: token });
@@ -1085,6 +1165,7 @@ function wire() {
   $('#bk-style-chip').addEventListener('click', (e) => { if (e.target.id === 'bk-style-clear') setStyle(''); });
   $('#sr-form').addEventListener('submit', submitStyleRequest);
   $('#bk-date').addEventListener('change', refreshSlotOptions);
+  $('#bk-ref').addEventListener('input', updatePayLock);
   $('#booking-form').addEventListener('submit', submitBooking);
   $('#my-booking-body').addEventListener('click', onTicketAction);
   $('#review-form').addEventListener('submit', submitReview);
@@ -1144,6 +1225,7 @@ function startPolling() {
     if (document.hidden) return;
     invalidateDays();
     loadQueue().catch(() => {});
+    loadPayInfo().then((changed) => { if (changed) renderPayFirst(); }).catch(() => {});
   }, 20000);
   setInterval(() => { if (!document.hidden && chatActive) loadChat().catch(() => {}); }, 15000);
   document.addEventListener('visibilitychange', () => {
@@ -1166,6 +1248,7 @@ async function boot() {
 
   // The shop's settings from the last visit show the page straight away; the latest ones replace
   // them as soon as they arrive (and the page is drawn again only if something changed).
+  payInfo = savedPayInfo();
   const saved = savedConfig();
   if (saved) {
     cfg = normalizeConfig(saved);
@@ -1180,6 +1263,7 @@ async function boot() {
     }
   }
   showMsg($('#bk-msg'), '');
+  loadPayInfo().then((changed) => { if (changed) renderPayFirst(); }).catch(() => {});
   renderConfig();
   initNotifyUi({
     text: (key, extra) => t(key, extra),

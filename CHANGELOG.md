@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.11.0 (2026-10-11)
+
+Pay first, then book. Run `supabase/migrations/15_pay_first.sql` once in the Supabase SQL editor
+(the site keeps working the old way until you do).
+
+- The payment details saved in the owner panel (Payments) are now shown to everyone on the booking
+  form, with the price. Before, only clients the owner had approved one by one could see them.
+- A client pays first, then enters the reference from their payment message (the transaction ID).
+  Only then do the free times open. The booking holds the slot straight away and is marked "Paid,
+  to confirm".
+- The owner is notified and sees the booking in Payments (and in the queue) with the reference.
+  "Mark paid" confirms it; "Not received" cancels it and frees the slot. The client is told either
+  way.
+- One reference can back one booking, and a person still holds one booking at a time.
+- A booking the owner hasn't confirmed by its slot time is cleared (the client is told to message
+  the owner with their reference), unless the client is already at the shop. An unconfirmed booking
+  is never started automatically; the owner can still start it by hand.
+- A switch in Payments ("Clients must pay before they can book") turns this on or off. It is on
+  after the update, and only applies once payment details are saved. Walk-ins are not charged here.
+- All the new wording can be changed in the Public page tab, under "Paying before booking".
+- The terms and the disclaimer describe paying first. (If the owner saved their own wording for
+  them, that wording is kept as it is.)
+
 ## 2.10.4 (2026-10-10)
 
 The Android app goes to 1.4.1 (built, tested and published by GitHub Actions). No database change.

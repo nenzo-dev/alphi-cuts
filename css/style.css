@@ -861,9 +861,31 @@ html.fx-lite .notify-dock { background: rgba(34, 31, 27, .97); }
   box-shadow: 0 0 24px rgba(212, 175, 55, .12), inset 0 1px 0 rgba(255, 245, 215, .1);
 }
 .held-note p { margin: 0; font-weight: 600; }
-#booking-form.is-held .field-row, #booking-form.is-held > label, #booking-form.is-held > input,
-#booking-form.is-held #bk-submit, #booking-form.is-held .form-note, #booking-form.is-held #bk-style-chip { display: none; }
+#booking-form.is-held .bk-slots, #booking-form.is-held > label, #booking-form.is-held > input, #booking-form.is-held #bk-pay,
+#booking-form.is-held #bk-locked, #booking-form.is-held #bk-submit, #booking-form.is-held .form-note, #booking-form.is-held #bk-style-chip { display: none; }
 .pay-expired { margin: 10px 0 0; color: #f0c27a; }
+
+/* ---------- pay first, then book (2.11.0) ---------- */
+.pay-first {
+  margin-bottom: 14px; padding: 14px; border-radius: 12px; border: 1px solid rgba(232, 200, 102, .45);
+  background: linear-gradient(135deg, rgba(232, 200, 102, .13), rgba(255, 240, 200, .03));
+}
+.pay-first h3 { margin: 0 0 4px; }
+.pay-first .pay-amount { margin: 8px 0 0; display: flex; align-items: baseline; gap: 8px; }
+.pay-first .pay-amount b { font-size: 22px; color: var(--gold-soft); }
+.pay-first pre {
+  white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 15px; margin: 8px 0 12px;
+  background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+.pay-first input { margin-bottom: 0; }
+.bk-slots { border: 0; padding: 0; margin: 0; min-width: 0; }
+.bk-slots[disabled] { opacity: .4; pointer-events: none; }
+.pay-locked { margin: 0 0 8px; }
+.pay-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: #f0c27a; border: 1px solid rgba(232, 200, 102, .5); background: rgba(232, 200, 102, .1); white-space: nowrap;
+}
+.pay-ref { font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
 
 /* ---------- find us: call and WhatsApp, the map (2.8.0) ---------- */
 #ct-contacts { margin-top: 16px; }

@@ -1,4 +1,4 @@
--- AlPhi Cuts database schema (v2.8.0).
+-- AlPhi Cuts database schema (v2.11.0).
 --
 -- Row-level security is the real access control. Anything the public can do goes through a
 -- SECURITY DEFINER function below, which checks its inputs and only touches what it should: a
@@ -48,6 +48,7 @@ create table public.site_config (
   arrival_radius_m int not null default 150,             -- how close counts as arrived, in metres
   auto_checkin boolean not null default true,            -- check clients in when their phone arrives
   auto_start boolean not null default true,              -- checked-in client goes in the chair at their slot
+  require_payment boolean not null default true,         -- pay before booking (only once payment details are saved)
   updated_at timestamptz not null default now(),
   constraint site_config_settings_check check (
     slot_minutes between 5 and 180
@@ -201,17 +202,26 @@ create table public.bookings (
   started_at timestamptz,
   finished_at timestamptz,
   arrived_auto boolean not null default false,   -- checked in by arriving at the shop (no position is kept)
-  payment_status text not null default 'none' check (payment_status in ('none', 'requested', 'approved', 'paid')),
+  payment_status text not null default 'none'
+    constraint bookings_payment_status_check check (payment_status in ('none', 'requested', 'approved', 'submitted', 'paid', 'rejected')),
+    -- none: pay at the shop. submitted: paid up front, the owner has yet to confirm it. paid: confirmed.
+    -- rejected: the owner could not find the payment (the booking is cancelled).
   payment_requested_at timestamptz,
   payment_approved_at timestamptz,
   paid_at timestamptz,
-  payment_expired_at timestamptz,   -- a request not approved by the slot time was cleared then
+  payment_expired_at timestamptz,   -- a request or an unconfirmed payment still open at the slot time was cleared then
+  payment_ref text constraint bookings_payment_ref_check check (payment_ref is null or length(payment_ref) between 5 and 40),
+  payment_submitted_at timestamptz,
   created_at timestamptz not null default now()
 );
 create unique index bookings_slot_taken
   on public.bookings (booking_date, slot_time)
   where status in ('booked', 'on_deck', 'called', 'checked_in');
 create index bookings_device_token on public.bookings (device_token);
+-- One payment reference backs one booking at a time (a cancelled booking frees it).
+create unique index bookings_payment_ref_used
+  on public.bookings (lower(payment_ref))
+  where payment_ref is not null and status <> 'cancelled';
 
 alter table public.bookings enable row level security;
 create policy bookings_owner_all on public.bookings for all
@@ -311,7 +321,8 @@ grant execute on function public.public_queue(date) to anon, authenticated;
 
 -- ============================================================ BOOKING (public)
 create or replace function public.book_slot(
-  p_date date, p_slot time, p_name text, p_phone text, p_style text default null, p_device text default null
+  p_date date, p_slot time, p_name text, p_phone text, p_style text default null, p_device text default null,
+  p_pay_ref text default null
 ) returns text   -- the new booking's client_token
 language plpgsql security definer set search_path = public as $$
 declare
@@ -321,9 +332,13 @@ declare
   v_phone text := btrim(coalesce(p_phone, ''));
   v_digits text := regexp_replace(coalesce(p_phone, ''), '\D', '', 'g');
   v_device text := case when public.valid_token(p_device) then p_device end;
+  v_ref text := btrim(coalesce(p_pay_ref, ''));
+  v_pay boolean;   -- payment is needed before this booking
   v_start int;
 begin
   select * into c from public.site_config where id = 1;
+  v_pay := c.require_payment
+    and coalesce(btrim((select instructions from public.payment_config where id = 1)), '') <> '';
 
   if coalesce(c.content->'hidden', '[]'::jsonb) ? 'book' then
     raise exception 'Online booking is paused right now. Please call or visit the shop.';
@@ -359,6 +374,9 @@ begin
   if length(coalesce(p_style, '')) > 100 then
     raise exception 'That style name is too long.';
   end if;
+  if v_pay and (length(v_ref) < 5 or length(v_ref) > 40 or v_ref !~ '^[A-Za-z0-9][A-Za-z0-9 ._/:#-]*$') then
+    raise exception 'Please pay first, then enter the reference from your payment message (5 to 40 letters and numbers).';
+  end if;
 
   -- Bookings go through one at a time, so one person can't take two slots by booking twice at once,
   -- and two people can't take overlapping slots (walk-ins take the same lock for the day).
@@ -383,12 +401,23 @@ begin
     raise exception 'You already have a booking. You can only book one slot at a time, so cancel it first to pick another time.';
   end if;
 
+  -- One payment, one booking.
+  if v_pay and exists (
+    select 1 from public.bookings where lower(payment_ref) = lower(v_ref) and status <> 'cancelled'
+  ) then
+    raise exception 'That payment reference has already been used for a booking. Each payment is for one booking.';
+  end if;
+
   if public.slot_is_taken(p_date, p_slot, c.slot_minutes) then
     raise exception 'That time was just taken. Please pick another.';
   end if;
 
-  insert into public.bookings (booking_date, slot_time, client_name, client_phone, style_choice, device_token)
-  values (p_date, p_slot, v_name, v_phone, nullif(btrim(coalesce(p_style, '')), ''), v_device)
+  insert into public.bookings (booking_date, slot_time, client_name, client_phone, style_choice, device_token,
+                               payment_status, payment_ref, payment_submitted_at)
+  values (p_date, p_slot, v_name, v_phone, nullif(btrim(coalesce(p_style, '')), ''), v_device,
+          case when v_pay then 'submitted' else 'none' end,
+          case when v_pay then v_ref end,
+          case when v_pay then now() end)
   returning client_token into v_token;
   return v_token;
 exception
@@ -396,7 +425,7 @@ exception
     raise exception 'That time was just taken. Please pick another.';
 end;
 $$;
-grant execute on function public.book_slot(date, time, text, text, text, text) to anon, authenticated;
+grant execute on function public.book_slot(date, time, text, text, text, text, text) to anon, authenticated;
 
 
 -- ============================================================ A CLIENT'S OWN BOOKINGS (by token)
@@ -423,7 +452,7 @@ begin
   delete from public.bookings
   where client_token = p_token
     and status in ('booked', 'on_deck', 'called', 'checked_in')
-    and payment_status not in ('approved', 'paid');
+    and payment_status not in ('approved', 'submitted', 'paid');
   if found then return; end if;
   update public.bookings set status = 'cancelled'
   where client_token = p_token and status in ('booked', 'on_deck', 'called', 'checked_in');
@@ -760,6 +789,7 @@ begin
   if not c.auto_start then return 0; end if;
   select id into v_next from public.bookings
     where booking_date = v_today and status = 'checked_in' and public.minute_of(slot_time) <= v_now
+      and payment_status <> 'submitted'
     order by slot_time limit 1;
   if v_next is null then return 0; end if;
   select max(started_at) into v_busy_since from public.bookings where booking_date = v_today and status = 'in_chair';
@@ -799,7 +829,7 @@ begin
   delete from public.bookings
   where id = p_booking_id
     and status in ('booked', 'on_deck', 'called', 'checked_in')
-    and payment_status not in ('approved', 'paid');
+    and payment_status not in ('approved', 'submitted', 'paid');
   if found then return; end if;
   update public.bookings set status = 'cancelled'
   where id = p_booking_id and status in ('booked', 'on_deck', 'called', 'checked_in');
@@ -1175,8 +1205,9 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_owner() then raise exception 'Owner access required.'; end if;
   update public.bookings set payment_status = 'paid', paid_at = now()
-  where id = p_booking_id and payment_status = 'approved';
-  if not found then raise exception 'Approve this booking for online payment first.'; end if;
+  where id = p_booking_id and payment_status in ('approved', 'submitted')
+    and status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair', 'done');
+  if not found then raise exception 'That payment can''t be marked as paid any more. Refresh the list and try again.'; end if;
 end;
 $$;
 grant execute on function public.admin_mark_paid(uuid) to authenticated;
@@ -1203,10 +1234,50 @@ create or replace function public.admin_list_pending_payments()
 returns setof public.bookings
 language sql stable security definer set search_path = public as $$
   select * from public.bookings
-  where public.is_owner() and payment_status in ('requested', 'approved')
+  where public.is_owner()
+    and (payment_status in ('requested', 'approved')
+         or (payment_status = 'submitted' and status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair')))
   order by booking_date, slot_time;
 $$;
 grant execute on function public.admin_list_pending_payments() to authenticated;
+
+create or replace function public.get_pay_info()
+returns table (required boolean, instructions text, amount_kwacha numeric)
+language sql stable security definer set search_path = public as $$
+  select
+    (c.require_payment and btrim(p.instructions) <> ''),
+    case when c.require_payment and btrim(p.instructions) <> '' then p.instructions end,
+    c.price_kwacha
+  from public.site_config c, public.payment_config p
+  where c.id = 1 and p.id = 1;
+$$;
+grant execute on function public.get_pay_info() to anon, authenticated;
+
+create or replace function public.admin_set_payment_required(p_required boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Owner access required.'; end if;
+  if coalesce(p_required, false) and coalesce(btrim((select instructions from public.payment_config where id = 1)), '') = '' then
+    raise exception 'Save your payment details first, so clients know where to pay.';
+  end if;
+  update public.site_config set require_payment = coalesce(p_required, false), updated_at = now() where id = 1;
+end;
+$$;
+revoke all on function public.admin_set_payment_required(boolean) from public, anon;
+grant execute on function public.admin_set_payment_required(boolean) to authenticated;
+
+create or replace function public.admin_reject_payment(p_booking_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_owner() then raise exception 'Owner access required.'; end if;
+  update public.bookings set status = 'cancelled', payment_status = 'rejected'
+  where id = p_booking_id and payment_status = 'submitted'
+    and status in ('booked', 'on_deck', 'called', 'checked_in');
+  if not found then raise exception 'That payment can''t be marked as not received any more. Refresh the list and try again.'; end if;
+end;
+$$;
+revoke all on function public.admin_reject_payment(uuid) from public, anon;
+grant execute on function public.admin_reject_payment(uuid) to authenticated;
 
 
 -- ============================================================ AUTOMATIC CLEANUP
@@ -1217,9 +1288,9 @@ begin
   select keep_days into v_keep from public.site_config where id = 1;
   v_keep := greatest(coalesce(v_keep, 90), 7);
   delete from public.bookings
-    where status = 'cancelled' and payment_status not in ('approved', 'paid');
+    where status = 'cancelled' and payment_status not in ('approved', 'submitted', 'paid');
   delete from public.bookings
-    where status = 'no_show' and booking_date < public.shop_today() and payment_status not in ('approved', 'paid');
+    where status = 'no_show' and booking_date < public.shop_today() and payment_status not in ('approved', 'submitted', 'paid');
   delete from public.bookings where booking_date < public.shop_today() - v_keep;
   delete from public.chat_messages where created_at < now() - make_interval(days => v_keep);
   delete from public.style_requests
@@ -1428,9 +1499,15 @@ begin
 
   if tg_op = 'INSERT' then
     if not v_owner then
-      perform public.push_queue('owners', 'owners', 'New booking',
-        new.client_name || ', ' || v_when || coalesce(' (' || nullif(btrim(new.style_choice), '') || ')', '') || '.',
-        './admin#bookings', 'owner-booking', false, 'new:' || new.id);
+      if new.payment_status = 'submitted' then
+        perform public.push_queue('owners', 'owners', 'New booking: confirm payment',
+          new.client_name || ', ' || v_when || '. Payment reference ' || new.payment_ref || '.',
+          './admin#payments', 'owner-booking', false, 'new:' || new.id);
+      else
+        perform public.push_queue('owners', 'owners', 'New booking',
+          new.client_name || ', ' || v_when || coalesce(' (' || nullif(btrim(new.style_choice), '') || ')', '') || '.',
+          './admin#bookings', 'owner-booking', false, 'new:' || new.id);
+      end if;
     end if;
     return new;
   end if;
@@ -1456,7 +1533,13 @@ begin
           new.client_name || ' is here for ' || public.push_time(new.slot_time) || '.', './admin#queue', 'owner-here', false, 'here:' || new.id);
       end if;
     elsif new.status = 'cancelled' then
-      if v_owner then
+      if new.payment_status = 'rejected' then
+        perform public.push_queue('booking', new.client_token, 'Payment not found',
+          public.push_text('pay_not_found', '{owner_first} could not find your payment for {time}, so the booking was cancelled. If you did pay, message {owner_first} with your payment reference.', new.slot_time),
+          './#book', 'pay-' || new.client_token, false, 'payno:' || new.id);
+      elsif new.payment_expired_at is not null and new.payment_expired_at is distinct from old.payment_expired_at then
+        null;   -- cleared at the slot time: expire_payment_requests() tells the client
+      elsif v_owner then
         perform public.push_queue('booking', new.client_token, 'Booking cancelled',
           'Your booking for ' || v_when || ' at ' || v_shop || ' was cancelled by the shop.',
           './#book', 'booking-' || new.client_token, false, 'cancel:' || new.id);
@@ -1475,6 +1558,10 @@ begin
       perform public.push_queue('booking', new.client_token, 'You can pay online',
         'Your online payment for ' || v_when || ' is approved. Open your booking to see how to pay.',
         './#book', 'pay-' || new.client_token, false, 'payok:' || new.id);
+    elsif new.payment_status = 'paid' and old.payment_status = 'submitted' then
+      perform public.push_queue('booking', new.client_token, 'Payment received',
+        'Your payment for ' || v_when || ' at ' || v_shop || ' is confirmed. See you then.',
+        './#book', 'pay-' || new.client_token, false, 'paid:' || new.id);
     end if;
   end if;
   return new;
@@ -1618,6 +1705,21 @@ begin
     if b.booking_date = public.shop_today() and b.status in ('booked', 'on_deck', 'called', 'checked_in', 'in_chair') then
       perform public.push_queue('booking', b.client_token, 'Online payment request cleared',
         public.push_text('pay_expired', 'Your request to pay online wasn''t approved before your slot, so it was cleared. Please pay at the shop.', b.slot_time),
+        './#book', 'pay-' || b.client_token, false, 'payexp:' || b.id);
+    end if;
+  end loop;
+
+  for b in
+    update public.bookings
+    set status = 'cancelled', payment_expired_at = now()
+    where payment_status = 'submitted' and status in ('booked', 'on_deck', 'called')
+      and booking_date + slot_time <= public.shop_now()
+    returning id, client_token, booking_date, slot_time
+  loop
+    v_count := v_count + 1;
+    if b.booking_date = public.shop_today() then
+      perform public.push_queue('booking', b.client_token, 'Payment not confirmed',
+        public.push_text('pay_unconfirmed', 'Your payment for {time} wasn''t confirmed before your slot, so the booking was cleared. If you did pay, message {owner_first} with your payment reference.', b.slot_time),
         './#book', 'pay-' || b.client_token, false, 'payexp:' || b.id);
     end if;
   end loop;

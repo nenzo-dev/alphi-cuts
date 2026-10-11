@@ -128,16 +128,27 @@
           <a class="btn btn-ghost btn-sm" href="#my-booking-card">See my booking</a>
         </div>
         <div id="bk-style-chip" class="style-chip" hidden></div>
-        <div class="field-row">
-          <div>
-            <label for="bk-date">Day</label>
-            <select id="bk-date"></select>
-          </div>
-          <div>
-            <label for="bk-slot">Time</label>
-            <select id="bk-slot"><option value="">Loading&hellip;</option></select>
-          </div>
+        <div id="bk-pay" class="pay-first" hidden>
+          <h3 data-c="pay_first_title">Pay first to book</h3>
+          <p class="small muted" data-c="pay_first_intro">Send the price to the details below, then enter the reference from your payment message.</p>
+          <p class="pay-amount"><span class="muted small">Amount</span> <b id="bk-pay-amount"></b></p>
+          <pre id="bk-pay-details"></pre>
+          <label for="bk-ref" data-c="pay_ref_label">Payment reference</label>
+          <input id="bk-ref" name="payref" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false">
         </div>
+        <p id="bk-locked" class="small muted pay-locked" data-c="pay_locked" hidden></p>
+        <fieldset id="bk-slots" class="bk-slots">
+          <div class="field-row">
+            <div>
+              <label for="bk-date">Day</label>
+              <select id="bk-date"></select>
+            </div>
+            <div>
+              <label for="bk-slot">Time</label>
+              <select id="bk-slot"><option value="">Loading&hellip;</option></select>
+            </div>
+          </div>
+        </fieldset>
         <label for="bk-name">Your name</label>
         <input id="bk-name" name="name" autocomplete="name" maxlength="60" placeholder="e.g. Mumba Chanda">
         <label for="bk-phone">Phone number</label>
@@ -280,7 +291,7 @@
       <a href="disclaimer">Disclaimer</a>
       <a href="admin">Owner login</a>
     </nav>
-    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.10.4</span></p>
+    <p class="small muted">Developed by <a href="developers">Nenzou, Nanyangwe, Sazambile, Matsika &amp; Sakeni</a> &middot; <span id="app-version">v2.11.0</span></p>
   </div>
 </footer>
 

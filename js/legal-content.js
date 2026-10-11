@@ -18,7 +18,7 @@ This page explains what {shop} collects through this website, why we collect it,
 - **Chat:** the messages you send us and our replies.
 - **Style requests:** the description you write and any photo you upload.
 - **Reviews:** the name you give (optional), your rating and your comment.
-- **Online payments:** whether you asked to pay online and whether the payment was approved and received. We never ask for card numbers or mobile money PINs. You pay us directly.
+- **Payments:** the payment reference you enter when you pay before booking, and whether the payment was confirmed. We never ask for card numbers or mobile money PINs. You pay us directly.
 - **Arriving at the shop:** only if you turn on "Check me in when I arrive" (see below).
 - **Notifications:** only if you turn them on (see below).
 - **On your device:** the site keeps a few random codes in your browser so it can show your own booking and chat. They don't contain your name or number. Clearing your browser data removes them, but you'll no longer see your booking on that device.
@@ -70,7 +70,7 @@ The information is stored with Supabase, our database provider, and the site is 
 
 ## How long we keep it
 
-- A cancelled booking is deleted straight away. The only exception is a booking you had already paid for online, which we keep so the payment can be traced.
+- A cancelled booking is deleted straight away. The only exception is a booking with a payment behind it, which we keep so the payment can be traced.
 - A missed booking is deleted the day after.
 - All other bookings and chat messages are deleted automatically after {keep_days} days.
 - Style requests, and any photo sent with one, are deleted after about {keep_days} days.
@@ -108,10 +108,12 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 ## Prices and payment
 
 - Prices are in Zambian kwacha and may change.
-- You can always pay at the shop.
-- Online payment is only possible once {owner_first} approves it for your booking. Only send money to the details shown on your own booking after approval.
-- Ask to pay online before your slot starts. A request that isn't approved by the time your slot starts is cleared, and you pay at the shop.
-- Refunds for online payments are handled directly with the shop.
+- To book a slot online you pay first. The payment details are on the booking form. After you pay, enter the reference from your payment message and the free times open.
+- Your booking holds the slot straight away, and {owner_first} confirms the payment. If it isn't confirmed by the time your slot starts and you aren't at the shop, the booking is cleared. If you did pay, message {owner_first} with your payment reference.
+- If {owner_first} can't find your payment, the booking is cancelled and the slot goes back on offer.
+- Each payment reference can be used for one booking only.
+- Paying up front is how we keep slots for people who will come. A booking you cancel isn't refunded automatically; ask the shop.
+- When the shop isn't asking for payment up front, you pay at the shop.
 
 ## Reviews, chat and photos
 
@@ -163,7 +165,7 @@ The Android app rings when your slot starts even when the app is closed, as long
 
 ## Payments
 
-Only pay online after your booking shows the payment details as approved, and only for that booking. {shop} is not responsible for money sent to other numbers or accounts, or sent before approval.
+Only pay to the details shown on the booking form on this site, and only for your own booking. {shop} is not responsible for money sent to other numbers or accounts.
 
 ## Ratings and reviews
 

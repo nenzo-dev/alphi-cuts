@@ -179,9 +179,13 @@
       <h2>Payments</h2>
       <form class="card" id="pay-form" novalidate>
         <h3>Your payment details</h3>
-        <p class="payment-note">Only approve online payment for bookings you'll accept, and only mark a booking paid once the money is in your account. These details are shown only to clients you approve.</p>
+        <p class="payment-note">These details are shown on the booking form to everyone who is about to book. Only mark a booking paid once the money is in your account.</p>
         <label for="pc-instructions">Mobile money or bank details</label>
         <textarea id="pc-instructions" maxlength="1000" placeholder="e.g. MTN Mobile Money: 097xxxxxxx (Alfred Phiri)"></textarea>
+        <div class="check-row" id="pc-required-row">
+          <label><input type="checkbox" id="pc-required"> Clients must pay before they can book</label>
+        </div>
+        <p class="hint">When this is on, a client pays you first, enters the reference from their payment message, and only then sees the free times. Their booking holds the slot and shows below until you mark it paid. If you can't find the payment, tap Not received and the slot is free again. A booking you haven't confirmed by its slot time is cleared (unless the client is already at the shop).</p>
         <button class="btn btn-gold" type="submit" id="pc-save" style="margin-top:12px">Save payment details</button>
         <div id="pc-msg"></div>
       </form>
@@ -189,7 +193,7 @@
         <h3>Waiting for you</h3>
         <div class="table-wrap">
           <table class="stack">
-            <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Time</th><th>Name</th><th>Reference</th><th>Status</th><th></th></tr></thead>
             <tbody id="payments-table"></tbody>
           </table>
         </div>
