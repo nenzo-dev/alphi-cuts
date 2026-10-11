@@ -7,7 +7,7 @@
 // is a new service worker: it downloads the new files in the background, replaces the old copies,
 // and js/lib/autoupdate.js then reloads open pages onto it. So every release must bump VERSION here
 // (and in js/config.js). Version checks and anything asked for fresh still go to the network.
-const VERSION = '2.11.0';
+const VERSION = '2.12.0';
 const CACHE = `alphicuts-${VERSION}`;
 // Photos and icons are kept across releases (they rarely change), so a new release doesn't download
 // them all again. Raise the number if a picture is ever replaced at the same address.
@@ -20,7 +20,7 @@ const CORE = [
   'js/lib/api.js', 'js/lib/ui.js', 'js/lib/slots.js', 'js/lib/content.js', 'js/lib/client.js',
   'js/lib/alarm.js', 'js/lib/ringtone.js', 'js/lib/notify.js', 'js/lib/ics.js', 'js/lib/image.js',
   'js/lib/appupdate.js', 'js/lib/arrival.js', 'js/lib/showcase.js', 'js/lib/autoupdate.js',
-  'js/lib/push.js', 'js/lib/notifyui.js', 'js/lib/soundui.js', 'js/lib/markdown.js',
+  'js/lib/push.js', 'js/lib/notifyui.js', 'js/lib/soundui.js', 'js/lib/markdown.js', 'js/lib/proof.js',
   'img/map.webp',
 ];
 
@@ -58,6 +58,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // database and other sites: never cached here
   if (url.pathname.startsWith('/app/')) return;    // the Android app download is always fetched fresh
+  if (url.pathname.startsWith('/vendor/')) return; // the screenshot reader (11 MB): the browser's own cache keeps it
   // The new-version check (js/lib/autoupdate.js) asks for config.js with no-store: straight to the network.
   if (request.cache === 'no-store' || request.cache === 'reload' || (url.search && request.mode !== 'navigate')) return;
 

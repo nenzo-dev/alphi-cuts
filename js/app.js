@@ -16,6 +16,7 @@ import { openSounds } from './lib/soundui.js';
 import { configureAlarms, updateAlarms, startsIn } from './lib/alarm.js';
 import { bookingIcs, downloadFile } from './lib/ics.js';
 import { prepareImage } from './lib/image.js';
+import { readFileInfo, readText, parseProofText, judgeProof, buildProof, accountNumbers, MAX_BYTES } from './lib/proof.js';
 import { watchAppUpdate } from './lib/appupdate.js';
 import { syncPush } from './lib/push.js';
 import { initNotifyUi, notifyState, showDock, openPanel, turnOnFromPage } from './lib/notifyui.js';
@@ -374,10 +375,10 @@ async function submitStyleRequest(e) {
 
 // ---------------------------------------------------------------- paying first (get_pay_info)
 // While the owner has "pay before booking" on and has saved payment details, the form shows those
-// details to everyone, and the day and time only open once a payment reference is entered. The
-// database checks the reference again when the booking is made.
+// details to everyone, and the day and time only open once a screenshot of the payment has been
+// read and checked (lib/proof.js, on this phone). The database checks what it can again when the
+// booking is made, and the owner looks at the screenshot and confirms the money himself.
 const PAY_KEY = 'ac_pay_info';
-const PAY_REF_MIN = 5;
 let payInfo = null; // { required, instructions, amount_kwacha }, or null when the database has no pay-first yet
 
 function savedPayInfo() {
@@ -398,7 +399,7 @@ async function loadPayInfo() {
     row = null; // the database has no pay-first yet; asked again next time, so it starts once it has
   }
   row = Array.isArray(row) ? row[0] : row;
-  const next = row ? { required: !!row.required, instructions: row.instructions || '', amount_kwacha: Number(row.amount_kwacha) } : null;
+  const next = row ? { required: !!row.required, instructions: row.instructions || '', amount_kwacha: Number(row.amount_kwacha), auto: !!row.auto } : null;
   const changed = JSON.stringify(next) !== JSON.stringify(payInfo);
   payInfo = next;
   storageSet(PAY_KEY, JSON.stringify(next));
@@ -406,8 +407,11 @@ async function loadPayInfo() {
 }
 
 const payRequired = () => !!(payInfo && payInfo.required);
-const payRefValue = () => $('#bk-ref').value.trim();
-const payRefOk = () => payRefValue().length >= PAY_REF_MIN;
+const payAuto = () => !!(payInfo && payInfo.required && payInfo.auto);   // checked against the owner's received messages
+const proofOk = () => !!(proof && proof.status === 'approved');
+const txnValue = () => $('#bk-txn').value.trim();
+const txnOk = () => !!(txnState && txnState.status === 'ok' && txnState.txn.toLowerCase() === txnValue().toLowerCase());
+const payVerified = () => (payAuto() ? txnOk() : proofOk());
 
 function renderPayFirst() {
   if (!cfg) return;
@@ -416,15 +420,226 @@ function renderPayFirst() {
   if (on) {
     $('#bk-pay-amount').textContent = `K${Number(payInfo.amount_kwacha).toFixed(0)}`;
     $('#bk-pay-details').textContent = payInfo.instructions;
-    $('#bk-ref').placeholder = t('pay_ref_hint');
+    $('#bk-pay-intro').textContent = t(payAuto() ? 'pay_auto_intro' : 'pay_first_intro');
+    $('#bk-proof-label').textContent = t(payAuto() ? 'pay_proof_label_auto' : 'pay_proof_label');
   }
+  $('#bk-auto').hidden = !(on && payAuto());
+  renderProof();
+  renderTxn();
   updatePayLock();
 }
 
 function updatePayLock() {
-  const locked = payRequired() && !payRefOk();
+  const locked = payRequired() && !payVerified();
   $('#bk-slots').disabled = locked;
   $('#bk-locked').hidden = !locked;
+  $('#bk-locked').textContent = t(payAuto() ? 'pay_locked_auto' : 'pay_locked');
+}
+
+// ---- automatic checking: the transaction ID is looked for among the messages on the owner's phone
+let txnState = null; // null, or { txn, status: 'looking' | 'ok' | 'none' | 'giveup' | 'low' | 'used', note }
+let txnRun = 0;
+
+function renderTxn() {
+  const box = $('#bk-txn-status');
+  if (!payAuto() || !txnState) { box.hidden = true; box.innerHTML = ''; box.className = 'proof-status'; return; }
+  const st = txnState.status;
+  box.hidden = false;
+  const note = txnState.note ? `<p class="small muted">${esc(txnState.note)}</p>` : '';
+  if (st === 'ok') {
+    box.className = 'proof-status ok';
+    box.innerHTML = `<h4>${esc(t('pay_found'))}</h4>${note}<p><b>${esc(t('pay_proof_show'))}</b></p>`;
+  } else if (st === 'looking' || st === 'none') {
+    box.className = 'proof-status busy';
+    box.innerHTML = `<div>${esc(t(st === 'none' ? 'pay_none' : 'pay_checking'))}&hellip;</div><div class="proof-bar"><i style="width:${Math.min(100, Math.round(((txnState.tries || 0) / 30) * 100))}%"></i></div>${note}`;
+  } else if (st === 'readfail') {
+    box.className = 'proof-status bad';
+    box.innerHTML = `<p>${esc(txnState.note)}</p>`;
+  } else if (st === 'giveup') {
+    box.className = 'proof-status bad';
+    box.innerHTML = `<h4>${esc(t('pay_giveup'))}</h4>${note}${callHtml()}`;
+  } else {
+    box.className = 'proof-status bad';
+    box.innerHTML = `<h4>${esc(t(st === 'low' ? 'pay_low' : 'pay_used'))}</h4>${note}${callHtml()}`;
+  }
+}
+
+async function checkTxn(note = '') {
+  const txn = txnValue();
+  const run = ++txnRun;
+  if (txn.length < 5) { txnState = null; renderTxn(); updatePayLock(); return; }
+  txnState = { txn, status: 'looking', tries: 0, note };
+  renderTxn();
+  updatePayLock();
+  // The message can reach the owner's phone a little after the payment, so it keeps looking for about two minutes.
+  for (let tries = 0; tries < 30; tries++) {
+    let answer;
+    try {
+      answer = await rpc('check_payment', { p_txn: txn });
+    } catch {
+      answer = 'none';
+    }
+    if (run !== txnRun) return;
+    if (answer === 'ok' || answer === 'low' || answer === 'used') {
+      txnState = { txn, status: answer, note };
+      renderTxn();
+      updatePayLock();
+      return;
+    }
+    txnState = { txn, status: 'none', tries: tries + 1, note };
+    renderTxn();
+    await new Promise((r) => setTimeout(r, 4000));
+    if (run !== txnRun) return;
+  }
+  txnState = { txn, status: 'giveup', note };
+  renderTxn();
+  updatePayLock();
+}
+
+// ---- the screenshot: read, checked, shown to the client before they book
+let proof = null; // null, or { status: 'busy' | 'approved' | 'rejected' | 'error', ... }
+let proofRun = 0;
+
+const fmtBytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+const fmtWhen = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { timeZone: CONFIG.timeZone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not shown');
+
+function callHtml() {
+  const tel = String((cfg && cfg.phone) || '').replace(/[^\d+]/g, '');
+  const text = esc(t('pay_proof_call'));
+  return tel.length >= 9
+    ? `<p>${text}</p><a class="btn btn-gold btn-sm proof-call" href="tel:${esc(tel)}">Call ${esc(ownerFirst())}</a>`
+    : `<p>${text}</p>`;
+}
+
+function factsHtml(p) {
+  const { info, parsed } = p;
+  const m = info.meta || {};
+  const row = (k, v) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`;
+  const to = parsed.recipient.name_ok ? cfg.owner_name : (parsed.recipient.account_ok ? `Account ${parsed.recipient.account}` : 'Not found');
+  const made = [m.software, m.xmp].filter(Boolean).join(', ') || 'No editing app found';
+  const cam = [m.make, m.model].filter(Boolean).join(' ') || (m.exposure ? 'Camera settings found' : 'None (a screenshot)');
+  return `
+    <table class="proof-facts">
+      ${row('Paid to', to)}
+      ${row('Amount', parsed.amount ? `K${Number(parsed.amount.value).toFixed(Number.isInteger(parsed.amount.value) ? 0 : 2)}` : 'Not found')}
+      ${row('Transaction ID', parsed.txn_id || 'Not found')}
+      ${row('Date and time', [parsed.date, parsed.time].filter(Boolean).join(' ') || 'Not found')}
+      ${row('Paid with', parsed.network || 'Not shown')}
+    </table>
+    <details>
+      <summary>The file and what we checked</summary>
+      <table class="proof-facts">
+        ${row('File name', info.name || 'Not shown')}
+        ${row('Type', info.kind ? info.kind.toUpperCase() : 'Not a picture')}
+        ${row('Size', fmtBytes(info.size))}
+        ${row('Pixels', info.width ? `${info.width} x ${info.height}` : 'Unknown')}
+        ${row('File saved', fmtWhen(info.modified))}
+        ${row('Made with', made)}
+        ${row('Camera', cam)}
+        ${m.taken ? row('Taken', m.taken) : ''}
+        ${row('Fingerprint', info.sha256.slice(0, 16))}
+      </table>
+      <ul class="proof-checks">
+        ${p.judged.checks.map((c) => `<li class="${c.ok ? '' : 'no'}">${esc(c.label)}${c.ok || !c.detail ? '' : ` <span class="muted">(${esc(c.detail)})</span>`}</li>`).join('')}
+      </ul>
+    </details>`;
+}
+
+function renderProof() {
+  const box = $('#bk-proof-status');
+  if (!proof || !payRequired()) { box.hidden = true; box.innerHTML = ''; box.className = 'proof-status'; return; }
+  box.hidden = false;
+  if (proof.status === 'busy') {
+    box.className = 'proof-status busy';
+    box.innerHTML = `<div>${esc(proof.label || 'Reading your screenshot')}&hellip;</div><div class="proof-bar"><i style="width:${Math.round((proof.pct || 0) * 100)}%"></i></div><p class="small muted">This runs on your phone and can take up to a minute.</p>`;
+  } else if (proof.status === 'error') {
+    box.className = 'proof-status bad';
+    box.innerHTML = `<h4>${esc(t('pay_proof_bad'))}</h4><p>We couldn't read it just now. Please try again, or use a clearer screenshot.</p>${callHtml()}`;
+  } else if (proof.status === 'approved') {
+    box.className = 'proof-status ok';
+    box.innerHTML = `<h4>${esc(t('pay_proof_ok'))}</h4>${factsHtml(proof)}
+      ${proof.judged.warnings.length ? `<p class="small muted">Not clear in the picture: ${esc(proof.judged.warnings.join(' '))}</p>` : ''}
+      <p><b>${esc(t('pay_proof_show'))}</b></p>`;
+  } else {
+    box.className = 'proof-status bad';
+    box.innerHTML = `<h4>${esc(t('pay_proof_bad'))}</h4>
+      <ul>${proof.judged.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>${factsHtml(proof)}${callHtml()}`;
+  }
+}
+
+async function readIdFromScreenshot(file, run) {
+  proof = { status: 'busy', pct: 0.02, label: 'Reading your screenshot' };
+  renderProof();
+  try {
+    const ocr = await readText(file, (pct, label) => {
+      if (run !== proofRun) return;
+      proof = { status: 'busy', pct, label };
+      renderProof();
+    });
+    if (run !== proofRun) return;
+    const parsed = parseProofText(ocr.text, { ownerName: cfg.owner_name, accountNumbers: accountNumbers(payInfo.instructions), today: todayISO() });
+    proof = null;
+    renderProof();
+    if (parsed.txn_id) {
+      $('#bk-txn').value = parsed.txn_id;
+      checkTxn(t('pay_read_id', { ref: parsed.txn_id })).catch(() => {});
+    } else {
+      txnState = { txn: txnValue(), status: 'readfail', note: t('pay_read_fail') };
+      renderTxn();
+      updatePayLock();
+    }
+  } catch {
+    if (run !== proofRun) return;
+    proof = null;
+    renderProof();
+    txnState = { txn: txnValue(), status: 'readfail', note: t('pay_read_fail') };
+    renderTxn();
+    updatePayLock();
+  }
+}
+
+async function onProofPicked() {
+  const file = $('#bk-proof').files && $('#bk-proof').files[0];
+  const run = ++proofRun;
+  proof = null;
+  if (!file || !cfg || !payInfo) { renderProof(); updatePayLock(); return; }
+  if (payAuto()) { await readIdFromScreenshot(file, run); return; }
+  proof = { status: 'busy', pct: 0.02, label: 'Checking the file' };
+  renderProof();
+  updatePayLock();
+  try {
+    const info = await readFileInfo(file);
+    if (run !== proofRun) return;
+    let ocr = { text: '', confidence: 0, words: 0 };
+    if (info.kind && info.size <= MAX_BYTES) {
+      ocr = await readText(file, (pct, label) => {
+        if (run !== proofRun) return;
+        proof = { status: 'busy', pct, label };
+        renderProof();
+      });
+    }
+    if (run !== proofRun) return;
+    const ctx = { ownerName: cfg.owner_name, accountNumbers: accountNumbers(payInfo.instructions), today: todayISO() };
+    const parsed = parseProofText(ocr.text, ctx);
+    const judged = judgeProof({ file: info, ocr, parsed }, { price: payInfo.amount_kwacha, ownerName: cfg.owner_name, today: todayISO() });
+    proof = { status: judged.verdict, file, info, ocr, parsed, judged, path: '' };
+  } catch {
+    if (run !== proofRun) return;
+    proof = { status: 'error' };
+  }
+  renderProof();
+  updatePayLock();
+}
+
+// Puts the picture in the private bucket (the owner reads it from there) and answers its path.
+async function uploadProof(p) {
+  const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[p.info.kind];
+  const mime = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[p.info.kind];
+  const id = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+  const path = `${deviceToken()}/${id}.${ext}`;
+  const blob = p.file.type === mime ? p.file : new File([p.file], `proof.${ext}`, { type: mime });
+  await uploadFile('payment-proofs', path, blob);
+  return path;
 }
 
 // ---------------------------------------------------------------- booking form
@@ -502,9 +717,9 @@ async function submitBooking(e) {
   const slot = $('#bk-slot').value;
   const name = $('#bk-name').value.trim();
   const phone = $('#bk-phone').value.trim();
-  if (payRequired() && !payRefOk()) {
-    showMsg(msg, 'Please pay first, then enter the reference from your payment message.', 'error');
-    $('#bk-ref').focus();
+  if (payRequired() && !payVerified()) {
+    showMsg(msg, t(payAuto() ? 'pay_locked_auto' : 'pay_locked'), 'error');
+    (payAuto() ? $('#bk-txn') : $('#bk-proof')).focus();
     return;
   }
   if (!date || !slot) { showMsg(msg, 'Please pick a day and a time.', 'error'); return; }
@@ -520,7 +735,20 @@ async function submitBooking(e) {
     try {
       const args = { p_date: date, p_slot: slot, p_name: name, p_phone: phone, p_style: selectedStyle || null };
       const paid = payRequired();
-      if (paid) args.p_pay_ref = payRefValue();
+      if (paid && payAuto()) {
+        args.p_pay_ref = txnState.txn;
+      } else if (paid) {
+        if (!proof.path) {
+          try {
+            proof.path = await uploadProof(proof);
+          } catch {
+            showMsg(msg, 'Your screenshot did not upload. Please check your connection and try again.', 'error');
+            return;
+          }
+        }
+        args.p_pay_ref = proof.parsed.txn_id;
+        args.p_proof = buildProof({ file: proof.info, ocr: proof.ocr, parsed: proof.parsed, judged: proof.judged, path: proof.path });
+      }
       // Older databases don't take p_device yet.
       const token = await rpcOr('book_slot', { ...args, p_device: deviceToken() }, () => rpc('book_slot', args), 'book_slot+device');
       addBookingToken(token);
@@ -531,7 +759,14 @@ async function submitBooking(e) {
       }
       $('#bk-name').value = '';
       $('#bk-phone').value = '';
-      $('#bk-ref').value = '';
+      $('#bk-proof').value = '';
+      $('#bk-txn').value = '';
+      proofRun++;
+      txnRun++;
+      proof = null;
+      txnState = null;
+      renderProof();
+      renderTxn();
       updatePayLock();
       setStyle('');
       invalidateDays();
@@ -1165,7 +1400,10 @@ function wire() {
   $('#bk-style-chip').addEventListener('click', (e) => { if (e.target.id === 'bk-style-clear') setStyle(''); });
   $('#sr-form').addEventListener('submit', submitStyleRequest);
   $('#bk-date').addEventListener('change', refreshSlotOptions);
-  $('#bk-ref').addEventListener('input', updatePayLock);
+  $('#bk-proof').addEventListener('change', onProofPicked);
+  $('#bk-check').addEventListener('click', () => checkTxn().catch(() => {}));
+  $('#bk-txn').addEventListener('input', () => { txnRun++; txnState = null; renderTxn(); updatePayLock(); });
+  $('#bk-txn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); checkTxn().catch(() => {}); } });
   $('#booking-form').addEventListener('submit', submitBooking);
   $('#my-booking-body').addEventListener('click', onTicketAction);
   $('#review-form').addEventListener('submit', submitReview);

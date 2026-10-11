@@ -6,7 +6,7 @@ import {
   $, $$, esc, showMsg, showError, toast, toastError, withBusy, friendlyError, installGlobalErrorHandlers,
   storageGet, storageSet,
 } from './lib/ui.js';
-import { fmtTime, todayISO, addDaysISO, daySlots, dayName, toMin } from './lib/slots.js';
+import { fmtTime, todayISO, addDaysISO, daySlots, dayName, toMin, shopDateOptions, slotStatuses, nowMinutesInShopTz, weekdayOf } from './lib/slots.js';
 import { TEXT_GROUPS, DEFAULT_TEXT, TEXT_LABELS, OPTIONAL_TEXT, SECTIONS, PLACEHOLDERS } from './lib/content.js';
 import { LEGAL_DOCS } from './legal-content.js';
 import { prepareImage } from './lib/image.js';
@@ -216,7 +216,7 @@ const stopTimers = () => { timers.splice(0).forEach(clearInterval); };
 
 const TABS = {
   queue: () => loadQueueTab(),
-  bookings: () => loadBookingsTab(),
+  bookings: () => Promise.all([loadBookingsTab(), loadAddBookingForm()]),
   chat: () => loadChatTab(),
   payments: () => loadPaymentsTab(),
   feedback: () => loadFeedbackTab(),
@@ -257,6 +257,7 @@ async function showAdmin() {
   // Clear cancelled and old records (also runs every 10 minutes on the database when it can).
   try { await rpc('admin_run_cleanup'); } catch { /* older database: nothing to run */ }
   purgeOldStyleRequests().catch(() => {});
+  purgeStaleProofs().catch(() => {});
   wireShell();
   showTab(location.hash.slice(1));
   refreshBadges();
@@ -339,6 +340,8 @@ function wireShell() {
   $('#walkin-form').addEventListener('submit', addWalkIn);
   $('#queue-table').addEventListener('click', onBookingAction);
   $('#bookings-table').addEventListener('click', onBookingAction);
+  $('#addbk-form').addEventListener('submit', addBookingByHand);
+  $('#ab-date').addEventListener('change', () => fillAddBookingSlots().catch(() => {}));
   $('#bk-date-filter').value = todayISO();
   $('#bk-date-filter').addEventListener('change', () => loadBookingsTab().catch((err) => report(err)));
   $('#bk-prev').addEventListener('click', () => shiftDay(-1));
@@ -353,6 +356,9 @@ function wireShell() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#admin-chat-form').requestSubmit(); }
   });
   $('#pay-form').addEventListener('submit', savePaymentDetails);
+  $('#sms-save').addEventListener('click', saveSmsAuto);
+  $('#sms-secret').addEventListener('click', makeSmsSecret);
+  $('#sms-setup').addEventListener('click', onSmsCopy);
   $('#payments-table').addEventListener('click', onPaymentAction);
   $('#feedback-list').addEventListener('click', onFeedbackAction);
   $('#requests-list').addEventListener('click', onRequestAction);
@@ -419,6 +425,7 @@ const PAY_LABEL = {
   none: '', requested: 'Wants to pay online', approved: 'Approved, awaiting payment', submitted: 'Paid, to confirm',
   paid: 'Paid', rejected: 'Payment not found',
 };
+const payLabel = (r) => (PAY_LABEL[r.payment_status] || '') + (r.payment_auto && r.payment_status === 'paid' ? ' (checked automatically)' : '');
 const WAITING = ['booked', 'on_deck', 'called', 'checked_in'];
 const shopClock = new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
@@ -436,6 +443,7 @@ function startedNote(r) {
 
 // A client who paid up front and hasn't been confirmed yet.
 function payTag(r) {
+  if (r.is_walkin) return ' <span class="pay-tag" title="Added at the shop. Booked clients are served first.">walk-in, last</span>';
   if (r.payment_status !== 'submitted') return '';
   return r.status === 'cancelled'
     ? ' <span class="pay-tag" title="Cleared at the slot time: the payment was never confirmed">not confirmed</span>'
@@ -452,8 +460,9 @@ function bookingActions(r, { full }) {
   if (full && WAITING.includes(r.status)) out.push(`<button class="btn btn-sm btn-gold" data-act="start" data-id="${esc(r.id)}">Start cut</button>`);
   if (full && r.status === 'in_chair') out.push(`<button class="btn btn-sm btn-gold" data-act="finish" data-id="${esc(r.id)}">Done</button>`);
   if (full && ['booked', 'on_deck', 'called'].includes(r.status)) out.push(`<button class="btn btn-sm btn-ghost" data-act="noshow" data-id="${esc(r.id)}">No-show</button>`);
+  if (r.payment_proof_path) out.push(`<button class="btn btn-sm btn-ghost" data-act="proof" data-id="${esc(r.id)}">View proof</button>`);
   if (r.payment_status === 'submitted' && (WAITING.includes(r.status) || r.status === 'in_chair')) {
-    out.push(`<button class="btn btn-sm btn-ghost" data-act="markpaid" data-id="${esc(r.id)}" title="${esc(`Reference ${r.payment_ref || ''}`)}">Mark paid</button>`);
+    out.push(`<button class="btn btn-sm btn-ghost" data-act="markpaid" data-id="${esc(r.id)}" title="${esc(`Transaction ${r.payment_ref || ''}`)}">Mark paid</button>`);
   }
   if (dbV2 && WAITING.includes(r.status)) out.push(`<button class="btn btn-sm btn-ghost" data-act="cancel" data-id="${esc(r.id)}">Cancel</button>`);
   return out.join('');
@@ -468,7 +477,10 @@ async function loadQueueTab() {
     <div class="stat"><div class="n">${count((r) => r.status === 'in_chair')}</div><div class="l">In the chair</div></div>
     <div class="stat"><div class="n">${count((r) => r.status === 'done')}</div><div class="l">Done today</div></div>
     <div class="stat"><div class="n">${count((r) => r.status === 'no_show')}</div><div class="l">No-shows</div></div>`;
-  const visible = rows.filter((r) => r.status !== 'cancelled');
+  // Clients with a booking come before walk-ins; each in slot order.
+  const visible = rows.filter((r) => r.status !== 'cancelled')
+    .sort((a, b) => (Number(!!a.is_walkin) - Number(!!b.is_walkin)) || String(a.slot_time).localeCompare(String(b.slot_time)));
+  lastRows = rows;
   $('#queue-table').innerHTML = visible.map((r) => `
     <tr>
       <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
@@ -484,14 +496,15 @@ async function loadBookingsTab() {
   const day = $('#bk-date-filter').value || todayISO();
   const rows = await rpc('admin_bookings_for_date', { p_date: day });
   const isToday = day === todayISO();
+  lastRows = rows;
   $('#bookings-table').innerHTML = rows.map((r) => `
     <tr>
       <td data-label="Time"><b>${fmtTime(r.slot_time)}</b>${startedNote(r)}</td>
-      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}</td>
+      <td data-label="Name">${esc(r.client_name)}${arrivedTag(r)}${r.is_walkin ? payTag(r) : ''}</td>
       <td data-label="Phone">${phoneLink(r.client_phone)}</td>
       <td data-label="Style" class="small muted">${esc(r.style_choice || '')}</td>
       <td data-label="Status"><span class="status-pill status-${esc(r.status)}">${esc(STATUS_LABEL[r.status] || r.status)}</span></td>
-      <td data-label="Payment" class="small muted">${esc(PAY_LABEL[r.payment_status] || '')}${r.payment_ref ? `<div class="pay-ref">${esc(r.payment_ref)}</div>` : ''}</td>
+      <td data-label="Payment" class="small muted">${esc(payLabel(r))}${r.payment_ref ? `<div class="pay-ref">${esc(r.payment_ref)}</div>` : ''}</td>
       <td class="actions">${bookingActions(r, { full: isToday })}</td>
     </tr>`).join('') || '<tr><td colspan="7" class="muted">No bookings that day.</td></tr>';
 }
@@ -510,8 +523,11 @@ const BOOKING_ACTIONS = {
   markpaid: ['admin_mark_paid', 'Have you checked that this money is in your account?'],
 };
 
+let lastRows = []; // the bookings last listed on the queue or bookings tab
+
 async function onBookingAction(e) {
   const btn = e.target.closest('[data-act]');
+  if (btn && btn.dataset.act === 'proof') { showProof(lastRows.find((r) => r.id === btn.dataset.id)).catch((err) => report(err)); return; }
   if (!btn || !BOOKING_ACTIONS[btn.dataset.act]) return;
   const [fn, question] = BOOKING_ACTIONS[btn.dataset.act];
   if (question && !window.confirm(question)) return;
@@ -610,14 +626,17 @@ async function loadPaymentsTab() {
   if (!editing) $('#pc-instructions').value = details || '';
   $('#pc-required-row').hidden = !(flag && flag[0] && 'require_payment' in flag[0]);
   if (!$('#pc-required-row').hidden && !editing) $('#pc-required').checked = !!flag[0].require_payment;
+  loadSmsCard().catch(() => {});
+  lastRows = rows || [];
   $('#payments-table').innerHTML = (rows || []).map((r) => `
     <tr>
       <td data-label="Date">${esc(r.booking_date)}</td>
       <td data-label="Time">${fmtTime(r.slot_time)}</td>
       <td data-label="Name">${esc(r.client_name)}<div class="small muted">${phoneLink(r.client_phone)}</div></td>
-      <td data-label="Reference">${r.payment_ref ? `<span class="pay-ref">${esc(r.payment_ref)}</span>` : ''}</td>
+      <td data-label="Transaction">${r.payment_ref ? `<span class="pay-ref">${esc(r.payment_ref)}</span>` : ''}</td>
       <td data-label="Status"><span class="status-pill ${r.payment_status === 'approved' ? 'status-checked_in' : 'status-called'}">${esc(PAY_LABEL[r.payment_status] || r.payment_status)}</span></td>
       <td class="actions">
+        ${r.payment_proof_path ? `<button class="btn btn-sm btn-ghost" data-pay="proof" data-id="${esc(r.id)}">View proof</button>` : ''}
         ${r.payment_status === 'requested' ? `<button class="btn btn-sm btn-gold" data-pay="approve" data-id="${esc(r.id)}">Approve</button>` : ''}
         ${r.payment_status === 'approved' || r.payment_status === 'submitted' ? `<button class="btn btn-sm btn-gold" data-pay="paid" data-id="${esc(r.id)}">Mark paid</button>` : ''}
         ${r.payment_status === 'submitted' ? `<button class="btn btn-sm btn-ghost" data-pay="reject" data-id="${esc(r.id)}">Not received</button>` : ''}
@@ -643,6 +662,7 @@ async function onPaymentAction(e) {
   const btn = e.target.closest('[data-pay]');
   if (!btn) return;
   const act = btn.dataset.pay;
+  if (act === 'proof') { showProof(lastRows.find((r) => r.id === btn.dataset.id)).catch((err) => report(err)); return; }
   const paid = act === 'paid';
   if (paid && !window.confirm('Have you checked that this money is in your account?')) return;
   if (act === 'reject' && !window.confirm("You couldn't find this payment? The booking will be cancelled and the slot becomes free again.")) return;
@@ -654,6 +674,218 @@ async function onPaymentAction(e) {
       refreshBadges();
     } catch (err) {
       report(err);
+    }
+  });
+}
+
+// ---------------------------------------------------------------- automatic checking (2.12.0)
+// The owner's phone forwards "money received" messages to record_received_sms(); book_slot() then finds
+// the client's transaction ID among them. Only the secret's hash is kept, so a new secret is shown once.
+let smsSecret = ''; // the secret made in this visit, if any
+
+const ago = (iso) => {
+  const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 48 * 60) return `${Math.round(mins / 60)} h ago`;
+  return `${Math.round(mins / 1440)} days ago`;
+};
+
+function smsSetupHtml() {
+  const url = `${CONFIG.supabase.url}/rest/v1/rpc/record_received_sms`;
+  const headers = `apikey: ${CONFIG.supabase.anonKey}\nAuthorization: Bearer ${CONFIG.supabase.anonKey}\nContent-Type: application/json`;
+  const body = `{"p_secret":"${smsSecret || 'YOUR-SECRET'}","p_from":"{{sender}}","p_text":"{{message}}"}`;
+  const row = (label, text, id) => `<div class="copy-row"><div style="flex:1;min-width:0"><b>${esc(label)}</b><pre>${esc(text)}</pre></div><button type="button" class="btn btn-sm btn-ghost" data-copy="${id}">Copy</button></div>`;
+  return `
+    ${smsSecret ? `<div class="sms-new"><b>Your new secret (shown only now, copy it into your app):</b><pre style="margin:6px 0 0;white-space:pre-wrap;word-break:break-all">${esc(smsSecret)}</pre><button type="button" class="btn btn-sm btn-gold" data-copy="secret" style="margin-top:6px">Copy secret</button></div>` : ''}
+    ${row('Address (POST)', url, 'url')}
+    ${row('Headers', headers, 'headers')}
+    ${row('Body', body, 'body')}`;
+}
+
+async function onSmsCopy(e) {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  const url = `${CONFIG.supabase.url}/rest/v1/rpc/record_received_sms`;
+  const text = {
+    url,
+    headers: `apikey: ${CONFIG.supabase.anonKey}\nAuthorization: Bearer ${CONFIG.supabase.anonKey}\nContent-Type: application/json`,
+    body: `{"p_secret":"${smsSecret || 'YOUR-SECRET'}","p_from":"{{sender}}","p_text":"{{message}}"}`,
+    secret: smsSecret,
+  }[btn.dataset.copy];
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied.');
+  } catch {
+    toast('Select the text and copy it.');
+  }
+}
+
+async function loadSmsCard() {
+  const card = $('#sms-card');
+  let st;
+  try { st = ((await rpc('admin_sms_status')) || [])[0]; } catch { card.hidden = true; return; } // older database
+  if (!st) { card.hidden = true; return; }
+  card.hidden = false;
+  $('#sms-on').checked = !!st.enabled;
+  $('#sms-status').innerHTML = `${st.enabled ? '<b>On.</b>' : '<b>Off.</b>'} ${st.has_secret ? '' : 'No secret made yet. '}${st.last_seen_at ? `Last message from your phone: ${esc(ago(st.last_seen_at))}.` : 'Nothing has come from your phone yet.'}`;
+  $('#sms-setup').innerHTML = smsSetupHtml();
+  const rows = (await rpc('admin_list_sms', { p_limit: 20 })) || [];
+  $('#sms-table').innerHTML = rows.map((r) => {
+    const what = r.kind === 'payment' ? `<b>K${esc(Number(r.amount))}</b> received` : (r.kind === 'ignored' ? 'Not a payment' : 'Could not read it');
+    const who = [r.from_name, r.from_phone].filter(Boolean).join(' ') || '';
+    const msg = r.kind === 'payment' ? '' : `<details><summary class="small">Show message</summary><div class="small muted">${esc(r.body)}</div></details>`;
+    return `<tr>
+      <td data-label="Time" class="small">${esc(ago(r.received_at))}</td>
+      <td data-label="What">${what}${msg}</td>
+      <td data-label="From" class="small">${esc(who)}<div class="muted">${esc(r.sender || '')}</div></td>
+      <td data-label="Transaction"><span class="pay-ref">${esc(r.txn_id || '')}</span></td>
+      <td data-label="Used by" class="small">${r.claimed_by ? esc(r.claimed_name || 'a booking') : (r.kind === 'payment' ? 'Not used yet' : '')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No messages yet.</td></tr>';
+}
+
+async function saveSmsAuto() {
+  const msg = $('#sms-msg');
+  await withBusy($('#sms-save'), async () => {
+    try {
+      await rpc('admin_set_sms_auto', { p_on: $('#sms-on').checked });
+      showMsg(msg, $('#sms-on').checked ? 'On. Clients are now checked against your messages.' : 'Off.', 'ok');
+      await loadSmsCard();
+    } catch (err) {
+      report(err, msg);
+    }
+  });
+}
+
+async function makeSmsSecret() {
+  if (!window.confirm('Make a new secret? Your phone stops working with this site until you put the new secret into its app.')) return;
+  await withBusy($('#sms-secret'), async () => {
+    try {
+      smsSecret = await rpc('admin_new_sms_secret');
+      await loadSmsCard();
+    } catch (err) {
+      report(err);
+    }
+  });
+}
+
+// ---------------------------------------------------------------- payment screenshots (2.12.0)
+const CHECK_LABEL = {
+  type: 'A picture file', size: 'Normal file size', pixels: 'Phone-screenshot size', edited: 'Not made or changed in an editing app',
+  camera: 'A screenshot, not a camera photo', fresh: 'File saved recently', readable: 'Writing clear enough to read',
+  recipient: 'Paid to the right person', amount: 'Amount covers the price', txn: 'Has a transaction ID', status: 'Does not say failed',
+  status_good: 'Says successful', date: 'Payment is recent', date_found: 'Date visible',
+};
+
+function closeProof() { $('#modal-root').innerHTML = ''; }
+
+async function showProof(row) {
+  if (!row || !row.payment_proof_path) { toast('There is no screenshot for this booking.'); return; }
+  const p = row.payment_proof || {};
+  const f = p.file || {};
+  const m = f.meta || {};
+  const x = p.extracted || {};
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { timeZone: CONFIG.timeZone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not shown');
+  const line = (k, v) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`;
+  const kb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(Number(n) / 1024))} KB`);
+  let url = '';
+  try { url = await signedFileUrl('payment-proofs', row.payment_proof_path, 600); } catch { url = ''; }
+  const checks = (p.checks || []).map((c) => `<li class="${c.ok ? '' : 'no'}">${esc(CHECK_LABEL[c.id] || c.id)}</li>`).join('');
+  const canAct = row.payment_status === 'submitted' && ['booked', 'on_deck', 'called', 'checked_in', 'in_chair'].includes(row.status);
+  $('#modal-root').innerHTML = `
+    <div class="modal-backdrop" id="proof-backdrop">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Payment screenshot">
+        <button type="button" class="modal-close" id="proof-close" aria-label="Close">&times;</button>
+        <h3>${esc(row.client_name)} &middot; ${esc(fmtTime(row.slot_time))}</h3>
+        <p class="small muted">Look at the screenshot and at your own payment messages. The details below were read by the client's phone and are only a check for obvious problems.</p>
+        ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="Payment screenshot" style="max-width:100%;max-height:55vh;border-radius:10px;display:block;margin:8px auto"></a>` : '<p class="muted">The screenshot could not be loaded.</p>'}
+        <table class="proof-facts">
+          ${line('Read as', p.verdict === 'approved' ? 'Accepted by the page' : String(p.verdict || 'Unknown'))}
+          ${line('Paid to', x.recipient_ok ? 'The owner\'s name was found' : (x.account_ok ? 'The payment account was found' : 'Not found'))}
+          ${line('Amount', x.amount != null ? `K${x.amount}` : 'Not found')}
+          ${line('Transaction ID', x.txn_id || 'Not found')}
+          ${line('Date and time on it', [x.date, x.time].filter(Boolean).join(' ') || 'Not found')}
+          ${line('Paid with', x.network || 'Not shown')}
+          ${x.phones && x.phones.length ? line('Numbers on it', x.phones.join(', ')) : ''}
+          ${line('File name', f.name || 'Not shown')}
+          ${line('Type and size', `${(f.kind || '').toUpperCase()} ${f.size ? kb(f.size) : ''}`.trim() || 'Unknown')}
+          ${line('Pixels', f.width ? `${f.width} x ${f.height}` : 'Unknown')}
+          ${line('File saved', when(f.modified))}
+          ${line('Made with', [m.software, m.xmp].filter(Boolean).join(', ') || 'No editing app found')}
+          ${line('Camera', [m.make, m.model].filter(Boolean).join(' ') || (m.exposure ? 'Camera settings found' : 'None'))}
+          ${m.taken ? line('Taken', m.taken) : ''}
+          ${line('Fingerprint', String(p.sha256 || row.payment_proof_hash || '').slice(0, 24))}
+          ${p.ocr ? line('Reading confidence', `${p.ocr.confidence}%`) : ''}
+        </table>
+        ${checks ? `<ul class="proof-checks">${checks}</ul>` : ''}
+        ${(p.warnings || []).length ? `<p class="small muted">Not clear: ${esc(p.warnings.join(' '))}</p>` : ''}
+        ${canAct ? `<div class="actions" style="margin-top:12px"><button class="btn btn-gold" data-pay="paid" data-id="${esc(row.id)}">Mark paid</button> <button class="btn btn-ghost" data-pay="reject" data-id="${esc(row.id)}">Not received</button></div>` : ''}
+      </div>
+    </div>`;
+  $('#proof-close').addEventListener('click', closeProof);
+  $('#proof-backdrop').addEventListener('click', (e) => { if (e.target.id === 'proof-backdrop') closeProof(); });
+  $('#modal-root').querySelectorAll('[data-pay]').forEach((b) => b.addEventListener('click', async (e) => {
+    closeProof();
+    await onPaymentAction(e);
+    if (activeTab === 'queue') loadQueueTab().catch(() => {});
+    if (activeTab === 'bookings') loadBookingsTab().catch(() => {});
+  }));
+}
+
+// Screenshots nothing refers to any more (never used, or their booking was deleted) are removed.
+async function purgeStaleProofs() {
+  let due;
+  try { due = (await rpc('admin_stale_payment_proofs')) || []; } catch { return; } // older database
+  const paths = due.map((r) => r.name).filter(Boolean);
+  if (paths.length) await removeFiles('payment-proofs', paths).catch(() => {});
+}
+
+// ---- book a client in by hand (for someone whose screenshot was turned down but who has paid)
+async function fillAddBookingSlots() {
+  if (!site) return;
+  const iso = $('#ab-date').value;
+  const sel = $('#ab-slot');
+  if (!iso) { sel.innerHTML = ''; return; }
+  const open = String(site.open_time).slice(0, 5);
+  const close = String(site.close_time).slice(0, 5);
+  const len = Number(site.slot_minutes) || 30;
+  let rows = [];
+  try { rows = (await rpc('public_queue', { p_date: iso })) || []; } catch { rows = []; }
+  const slots = daySlots(open, close, len);
+  const taken = slotStatuses(slots, rows.filter((r) => r.status !== 'cancelled' && r.status !== 'no_show'), len);
+  const isToday = iso === todayISO();
+  const free = slots.filter((s) => !taken.has(s) && (!isToday || toMin(s) > nowMinutesInShopTz()));
+  sel.innerHTML = free.length ? free.map((s) => `<option value="${s}">${fmtTime(s)}</option>`).join('') : '<option value="">No free times that day</option>';
+}
+
+async function loadAddBookingForm() {
+  if (!site) return;
+  const closed = Array.isArray(site.closed_weekdays) ? site.closed_weekdays.map(Number) : [];
+  const opts = shopDateOptions(Number(site.booking_days_ahead) || 7, closed).filter((o) => !o.closed);
+  const prev = $('#ab-date').value;
+  $('#ab-date').innerHTML = opts.map((o) => `<option value="${o.iso}">${esc(o.label)}</option>`).join('');
+  if (opts.some((o) => o.iso === prev)) $('#ab-date').value = prev;
+  await fillAddBookingSlots();
+}
+
+async function addBookingByHand(e) {
+  e.preventDefault();
+  const msg = $('#ab-msg');
+  const name = $('#ab-name').value.trim();
+  const phone = $('#ab-phone').value.trim();
+  if (!$('#ab-slot').value) { showMsg(msg, 'Pick a day and a time.', 'error'); return; }
+  if (!name) { showMsg(msg, 'Enter the name.', 'error'); return; }
+  if (phone.replace(/\D/g, '').length < 9) { showMsg(msg, 'Enter a valid phone number.', 'error'); return; }
+  await withBusy($('#ab-add'), async () => {
+    try {
+      await rpc('admin_add_booking', { p_date: $('#ab-date').value, p_slot: $('#ab-slot').value, p_name: name, p_phone: phone });
+      showMsg(msg, `${name} is booked for ${fmtTime($('#ab-slot').value)}.`, 'ok');
+      $('#ab-name').value = '';
+      $('#ab-phone').value = '';
+      await Promise.allSettled([fillAddBookingSlots(), loadBookingsTab()]);
+    } catch (err) {
+      report(err, msg);
     }
   });
 }

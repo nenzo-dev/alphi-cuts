@@ -1,5 +1,49 @@
 # Changelog
 
+## 2.12.0 (2026-10-11)
+
+Pay first with a screenshot, and walk-ins come last. Run `supabase/migrations/16_payment_screenshots.sql`
+once in the Supabase SQL editor, after 15. (Until then the site keeps working as in 2.11.0.)
+
+- With pay-before-booking on, a client uploads a screenshot of their payment instead of typing a
+  reference. The page reads it on the client's own phone (Tesseract, kept in `vendor/tesseract`, no
+  picture is sent anywhere to be read) and shows what it found: who was paid, the amount, the
+  transaction ID, the date and time, the network, and the file itself (name, type, size, pixels, when
+  it was saved, the camera or editing app named in its metadata, a fingerprint).
+- A proof is turned down when the person paid isn't the owner (by name, or by the account in the
+  payment details), the amount is below the price, there is no transaction ID, the payment looks old
+  or failed, the picture is edited or a camera photo, an old file, unreadable, or already used. The
+  client is told why and to call Mr Alfred to confirm he has seen their payment. Only an accepted
+  screenshot opens the free times.
+- Even then the client is told to show the payment to the owner, who confirms it. The screenshot is
+  saved in a private bucket and the owner sees it, with everything read, under View proof (Payments
+  and the queue). The database checks what it can (accepted, the picture is in the bucket, the amount,
+  the transaction ID, one screenshot or transaction per booking) but can't read the picture, so the
+  owner's confirmation is what counts.
+- Walk-ins come last: they are tagged, listed after booked clients, and never started automatically
+  ahead of a booked client or when a booked client's slot is about to start.
+- Bookings tab: "Book a client in" for someone whose screenshot was turned down but who has shown
+  the payment. It counts as paid.
+- Screenshots nothing refers to any more are deleted by the owner panel.
+- Terms and privacy describe the screenshot, the checks and the order of service.
+
+Part 2 (migration 17, after 16): payments checked against the owner's own messages.
+
+- The owner's Android phone forwards each mobile-money "money received" message to the site (an SMS
+  forwarding app; the owner panel, Payments, shows the address, headers and body to put in it and
+  makes a secret, shown once, of which only a hash is kept). Messages from mobile-money and bank
+  senders are read (amount, transaction ID, who sent it) and kept; all others are dropped.
+- With "Check payments automatically" on, a client pays, types the transaction ID from their message
+  (or uploads a screenshot and the page reads the ID), and the site looks for that payment among the
+  received messages. It keeps looking for about two minutes in case the message is a little late. Once
+  found (big enough, from the last 3 days, not spent on another booking) the client can pick a time, and
+  the booking is made as paid in one step, with nothing for the owner to confirm. A made-up transaction
+  ID can't be found, so this can't be faked from the page.
+- A cancelled booking gives its payment back. The owner sees every message received and which booking
+  used it, can switch the checking off (the screenshot way takes over) and can make a new secret.
+- If the owner's phone is off nothing arrives and nobody can book until it is back or the owner switches
+  checking off. Message formats are read forgivingly and every message is kept, so they can be read again.
+
 ## 2.11.0 (2026-10-11)
 
 Pay first, then book. Run `supabase/migrations/15_pay_first.sql` once in the Supabase SQL editor

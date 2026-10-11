@@ -17,7 +17,7 @@ hosted on Cloudflare Pages.
 - **Owner panel** (`admin.html`): run the queue, add walk-ins, reply to messages, approve online
   payments (and switch pay-before-booking on or off), moderate reviews, and change hours, slot length, booking window, reminder time,
   closed days, every piece of wording on the public page, which sections show, and the legal pages.
-- Reviews, chat, a style gallery with photo requests, pay-before-booking with manual mobile-money confirmation and receipts,
+- Reviews, chat, a style gallery with photo requests, pay-before-booking with a payment screenshot (read on the client's phone, checked, then confirmed by the owner) and receipts, walk-ins served after booked clients,
   privacy policy, terms of use and disclaimer.
 - **Tidy records.** An early cut frees the booked slot. Cancelled bookings are deleted, missed ones
   the next day, and everything else (bookings, chat, style requests and their photos) after a number

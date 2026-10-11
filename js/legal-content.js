@@ -18,8 +18,9 @@ This page explains what {shop} collects through this website, why we collect it,
 - **Chat:** the messages you send us and our replies.
 - **Style requests:** the description you write and any photo you upload.
 - **Reviews:** the name you give (optional), your rating and your comment.
-- **Payments:** the payment reference you enter when you pay before booking, and whether the payment was confirmed. We never ask for card numbers or mobile money PINs. You pay us directly.
+- **Payments:** the screenshot of your payment that you upload when you pay before booking, what is read from it (who was paid, the amount, the transaction ID, the date and details of the picture file such as its size and when it was saved), and whether the payment was confirmed. The screenshot is read on your own phone, then saved so {owner_first} can check it. A screenshot can show other things, such as your own number or balance, so crop it if you like, but keep the payment details clear. We never ask for card numbers or mobile money PINs. You pay us directly.
 - **Arriving at the shop:** only if you turn on "Check me in when I arrive" (see below).
+- **Received-money messages:** to check payments automatically, the shop's phone forwards the mobile-money and bank messages it receives. From each we keep the amount, the transaction ID, the sender's name and number as shown, and the message. Your transaction ID is looked up among them to find your payment. Messages from other senders are dropped.
 - **Notifications:** only if you turn them on (see below).
 - **On your device:** the site keeps a few random codes in your browser so it can show your own booking and chat. They don't contain your name or number. Clearing your browser data removes them, but you'll no longer see your booking on that device.
 - **Your sounds:** the tones you choose, and any sound file you pick as your own, are kept in your browser on that device. The file is never uploaded to us.
@@ -73,6 +74,8 @@ The information is stored with Supabase, our database provider, and the site is 
 - A cancelled booking is deleted straight away. The only exception is a booking with a payment behind it, which we keep so the payment can be traced.
 - A missed booking is deleted the day after.
 - All other bookings and chat messages are deleted automatically after {keep_days} days.
+- A payment screenshot is deleted with the booking it belongs to, and one that was never used for a booking is deleted within a day or two.
+- Received-money messages are deleted after {keep_days} days.
 - Style requests, and any photo sent with one, are deleted after about {keep_days} days.
 
 You can ask us to delete your information sooner at any time.
@@ -108,10 +111,14 @@ By using this website or booking a slot with {shop}, you agree to these terms.
 ## Prices and payment
 
 - Prices are in Zambian kwacha and may change.
-- To book a slot online you pay first. The payment details are on the booking form. After you pay, enter the reference from your payment message and the free times open.
-- Your booking holds the slot straight away, and {owner_first} confirms the payment. If it isn't confirmed by the time your slot starts and you aren't at the shop, the booking is cleared. If you did pay, message {owner_first} with your payment reference.
+- To book a slot online you pay first. The payment details are on the booking form. After you pay, upload a screenshot of the payment. We check it for obvious problems (who was paid, the amount, the transaction ID, the date, and whether the picture has been edited), and the free times open if it passes. A screenshot that doesn't pass is turned down; if you really paid, call {owner_first} so he can confirm he has seen your payment.
+- If the shop checks payments automatically, you type the transaction ID from your payment message (or upload a screenshot and we read the ID), and we look for that payment among the money the shop has received. Once it is found, your booking is paid. A payment can only be used for one booking.
+- A screenshot that passes is not proof on its own. Please show your payment to {owner_first} when you arrive. He confirms it.
+- Your booking holds the slot straight away. If {owner_first} hasn't confirmed the payment by the time your slot starts and you aren't at the shop, the booking is cleared. If you did pay, call {owner_first} with your transaction ID.
+- Clients who have booked and paid are served first. Walk-ins are always served last, so booking is the way to secure your slot.
+- Sending a fake or edited proof of payment can get you refused service.
 - If {owner_first} can't find your payment, the booking is cancelled and the slot goes back on offer.
-- Each payment reference can be used for one booking only.
+- Each payment (transaction ID and screenshot) can be used for one booking only.
 - Paying up front is how we keep slots for people who will come. A booking you cancel isn't refunded automatically; ask the shop.
 - When the shop isn't asking for payment up front, you pay at the shop.
 
