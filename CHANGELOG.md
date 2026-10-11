@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.3 (2026-10-11)
+
+No database change.
+
+- The note under the screenshot field now says only "Upload the payment screenshot soon after payment,
+  at least in less than 30 minutes." The line about each screenshot or payment being usable once is gone
+  from there (the terms still say it). The real limit stays an hour and is not shown.
+
 ## 2.12.2 (2026-10-11)
 
 Run `supabase/migrations/19_rejected_proofs_log.sql` once in the Supabase SQL editor, after 18.

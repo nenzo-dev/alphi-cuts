@@ -90,7 +90,7 @@ export const TEXT_GROUPS = [
       pay_first_title: ['Heading', 'Pay first to book'],
       pay_first_intro: ['Intro', 'Send {price} to the details below, then upload a screenshot of your payment and sign with your name. We read the screenshot, and the free times open if it checks out.'],
       pay_warning: ['Warning in the payment box', 'An accepted screenshot lets you book a slot. It does not guarantee your service from Mr {owner_first}. After you pay, call him to confirm he has received your payment. He is not responsible for money sent to other people or numbers, so only pay to the details above.'],
-      pay_fresh_note: ['Note under the screenshot field', 'Upload the payment screenshot soon after you pay, at least within 30 minutes. Each screenshot or payment can only be used once.'],
+      pay_fresh_note: ['Note under the screenshot field', 'Upload the payment screenshot soon after payment, at least in less than 30 minutes.'],
       pay_cancelled: ['A cancelled booking with a payment behind it', "You cancelled this booking. Its payment can't be used for another booking, so please talk to Mr {owner_first} about it."],
       pay_proof_label: ['Screenshot field label', 'Screenshot of your payment'],
       pay_priority: ['Reminder under the screenshot field', 'Booked and paid clients are served first. Walk-ins are always served last, so book to secure your slot.'],
