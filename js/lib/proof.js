@@ -4,10 +4,12 @@
 //                      text / XMP: the camera, the editing app, the time it was taken).
 //   2. readText()      OCR with Tesseract (vendor/tesseract, loaded only when a screenshot is picked).
 //   3. parseProofText() who was paid, how much, the transaction ID, the date, the status.
-//   4. judgeProof()    checks all of it against what this shop expects and answers approved or
-//                      rejected, with the reasons in plain words.
-// The checks catch careless fakes and mistakes. They can't prove a payment is real, which is why
-// the owner still looks at the screenshot and confirms the money himself.
+//   4. judgeProof()    only two things can turn a screenshot down: it isn't a picture, or it
+//                      doesn't show the price paid. Everything else (name, account, transaction
+//                      ID, timing, editing marks...) is read and kept as a note for Mr Alfred, not
+//                      a reason to reject, because those checks were turning down real payments.
+// An accepted screenshot only books the slot. Mr Alfred still looks at it and confirms the money
+// himself when the client shows up at the shop.
 
 const OCR_BASE = new URL('../../vendor/tesseract/', import.meta.url).href;
 
@@ -520,13 +522,13 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
 
   add('type', 'It is a picture file (JPG, PNG or WebP)', file.kind !== '', file.kind ? '' : 'This is not a JPG, PNG or WebP picture.');
   add('size', 'The file size is normal for a screenshot', file.size >= MIN_BYTES && file.size <= MAX_BYTES,
-    file.size > MAX_BYTES ? 'The file is too large (over 8 MB).' : 'The file is too small to be a real screenshot.');
+    file.size > MAX_BYTES ? 'The file is too large (over 8 MB).' : 'The file is too small to be a real screenshot.', false);
   add('pixels', 'It is the size of a phone screenshot', Math.min(file.width, file.height) >= 400 && Math.max(file.width, file.height) >= 700,
-    'The picture is too small to be a screenshot of a phone screen.');
+    'The picture is too small to be a screenshot of a phone screen.', false);
   const editor = [m.software, m.xmp, m.owner].filter(Boolean).find((s) => EDITORS.test(s)) || (m.photoshop ? 'Photoshop' : '');
-  add('edited', 'It was not made or changed in an editing app', !editor, editor ? `Its details say it was made or changed with ${editor}.` : '');
+  add('edited', 'It was not made or changed in an editing app', !editor, editor ? `Its details say it was made or changed with ${editor}.` : '', false);
   const camera = !!(m.exposure || m.aperture || m.iso);
-  add('camera', 'It is a screenshot, not a photo of a screen', !camera, 'This looks like a photo taken with a camera. Please send a screenshot.');
+  add('camera', 'It is a screenshot, not a photo of a screen', !camera, 'This looks like a photo taken with a camera. Please send a screenshot.', false);
   const agoText = (min) => (min < 120 ? `${Math.round(min)} minutes` : `${Math.round(min / 60)} hours`);
   // Minutes since a date and time on the shop's clock (negative when it is in the future).
   const nowMin = Number.isFinite(ctx.nowMin) ? ctx.nowMin : now.getUTCHours() * 60 + now.getUTCMinutes();
@@ -539,7 +541,7 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   // Everything about the file has to be from the last hour: when it was saved, and the date in its name.
   const fileAge = file.modified && Date.parse(file.modified) > 86400000 ? (now.getTime() - Date.parse(file.modified)) / 60000 : null;
   add('fresh', 'The screenshot was saved in the last hour', fileAge !== null && recent(fileAge),
-    fileAge === null ? 'The file does not say when it was saved.' : `The file ${fileAge < 0 ? 'was saved in the future' : `was saved ${agoText(fileAge)} ago`}.`);
+    fileAge === null ? 'The file does not say when it was saved.' : `The file ${fileAge < 0 ? 'was saved in the future' : `was saved ${agoText(fileAge)} ago`}.`, false);
   // Everything inside the picture about when it was made has to be recent too.
   const metaStamp = (v) => {
     const x = /^(20\d{2})[:/-](\d{2})[:/-](\d{2})[ T](\d{2}):(\d{2})/.exec(String(v || '').trim());
@@ -547,23 +549,23 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   };
   const metaOld = [m.taken, m.dateTime].map(metaStamp).filter(Boolean).map(([d, t]) => minutesAgo(d, t)).find((a) => !recent(a));
   add('meta_time', 'The date saved inside the picture is from the last hour', metaOld === undefined,
-    metaOld === undefined ? '' : `The date saved inside the picture ${tooOld(metaOld)}.`);
+    metaOld === undefined ? '' : `The date saved inside the picture ${tooOld(metaOld)}.`, false);
   const readable = (ocr.words || 0) >= 12 && (ocr.confidence || 0) >= MIN_CONFIDENCE;
-  add('readable', 'The writing is clear enough to read', readable, 'We could not read the writing clearly. Please send a full, sharp screenshot of the payment message.');
+  add('readable', 'The writing is clear enough to read', readable, 'We could not read the writing clearly. Please send a full, sharp screenshot of the payment message.', false);
 
   const r = parsed.recipient;
   // The owner's name has to be there, and the account (agent code) from his payment details too, when there is one.
   add('recipient', `The payment went to ${owner}`, r.name_ok && (!ctx.requireAccount || r.account_ok),
-    r.name_ok ? 'We could not see the payment account (the agent code or number) from the payment details.' : `We could not see "${owner}" as the person paid.`);
+    r.name_ok ? 'We could not see the payment account (the agent code or number) from the payment details.' : `We could not see "${owner}" as the person paid.`, false);
 
   const amt = parsed.amount;
   add('amount', `The amount is ${fmtK(price)} or more`, !!amt && amt.value + 0.001 >= price,
     amt ? `We read ${fmtK(amt.value)}, but the price is ${fmtK(price)}.` : 'We could not find the amount paid.');
 
-  add('txn', 'There is a transaction ID', !!parsed.txn_id, 'We could not find a transaction ID in the screenshot.');
+  add('txn', 'There is a transaction ID', !!parsed.txn_id, 'We could not find a transaction ID in the screenshot.', false);
   add('status', 'It does not say the payment failed', parsed.status_bad.length === 0,
-    `It mentions "${parsed.status_bad[0] || ''}", so the payment may not have gone through.`);
-  add('status_good', 'It says the payment was successful', parsed.status_good.length > 0, 'We could not see a "successful", "sent" or "withdrawn" message.');
+    `It mentions "${parsed.status_bad[0] || ''}", so the payment may not have gone through.`, false);
+  add('status_good', 'It says the payment was successful', parsed.status_good.length > 0, 'We could not see a "successful", "sent" or "withdrawn" message.', false);
 
   // When it was paid: the date and time (the time inside an Airtel transaction ID, or the one beside the date).
   // No date or no time means no way to know how old the payment is, so it is turned down.
@@ -576,17 +578,17 @@ export function judgeProof({ file, ocr, parsed }, ctx = {}) {
   } else if (parsed.date) {
     dateDetail = 'It shows a date but no time, so there is no way to tell how old the payment is.';
   }
-  add('date', 'The payment was made in the last hour', dateOk, dateDetail);
+  add('date', 'The payment was made in the last hour', dateOk, dateDetail, false);
   const agrees = !parsed.tid_date || !(parsed.text_dates || []).length || parsed.text_dates.some((d) => d === parsed.tid_date);
-  add('tid_date', 'The date matches the date in the transaction ID', agrees, "The date shown doesn't match the date inside the transaction ID.");
+  add('tid_date', 'The date matches the date in the transaction ID', agrees, "The date shown doesn't match the date inside the transaction ID.", false);
   let timesOk = true;
   if (parsed.tid_time && parsed.written_time) {
     const [a, b] = [parsed.tid_time, parsed.written_time].map((x) => { const [h, mi] = x.split(':').map(Number); return h * 60 + mi; });
     const gap = Math.abs(a - b);
     timesOk = Math.min(gap, 1440 - gap) <= 10;   // a message can arrive a little after the payment
   }
-  add('times_agree', 'The time shown matches the time in the transaction ID', timesOk, "The time shown doesn't match the time inside the transaction ID.");
-  add('one_payment', 'The picture shows one payment', (parsed.tid_count || 0) <= 1, 'The picture shows more than one transaction.');
+  add('times_agree', 'The time shown matches the time in the transaction ID', timesOk, "The time shown doesn't match the time inside the transaction ID.", false);
+  add('one_payment', 'The picture shows one payment', (parsed.tid_count || 0) <= 1, 'The picture shows more than one transaction.', false);
 
   // Not even a picture: that is the only thing worth saying.
   const failed = file.kind === '' ? checks.filter((c) => c.id === 'type') : checks.filter((c) => c.hard && !c.ok);

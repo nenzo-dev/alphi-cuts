@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.15.2 (2026-10-29)
+
+No database change.
+
+- The payment screenshot check was turning down real payments (wrong editing-app guess, an old file date, the name or transaction ID not quite matching, more than one check disagreeing). Now only two things turn a screenshot down: it isn't a picture, or it doesn't show the full amount. Everything else the reader finds is kept as a note for Mr Alfred to see, not a reason to reject it, since he looks at every accepted screenshot and confirms the money himself.
+- The note under the screenshot field no longer claims a 30-minute cutoff that isn't checked any more. It now says to make sure the screenshot clearly shows the amount, and to show it to Mr Alfred when you arrive.
+
 ## 2.15.1 (2026-10-11)
 
 No database change.
